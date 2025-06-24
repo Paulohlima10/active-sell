@@ -46,12 +46,14 @@ async def send_message_via_http(
     phone_number,
     msg=None,
     image_url=None,
+    pdf_url=None,
     msg_id=None,
     context_info=None,
     variables=None,
     token="9C84DC7EBCC6-4B17-8625-A4A60018AC03",
     text_url=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/text",
-    image_url_api=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/image"
+    image_url_api=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/image",
+    pdf_url_api=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/document"
 ):
     headers = {
         "Token": token,
@@ -67,8 +69,27 @@ async def send_message_via_http(
 
     results = {}
 
-    # Se ambos msg e image_url forem fornecidos, envie a imagem primeiro e depois o texto
-    if msg and image_url:
+    # Função auxiliar para envio de PDF
+    def send_pdf(pdf_url_to_send):
+        if not pdf_url_to_send or not isinstance(pdf_url_to_send, str):
+            raise Exception("pdf_url inválido ou não fornecido")
+        response = requests.get(pdf_url_to_send)
+        if response.status_code != 200:
+            raise Exception(f"Erro ao baixar PDF: {response.status_code}")
+        pdf_base64 = base64.b64encode(response.content).decode("utf-8")
+        pdf_data = f"data:application/octet-stream;base64,{pdf_base64}"
+        file_name = os.path.basename(pdf_url_to_send)
+        payload_pdf = {
+            "Phone": phone_number,
+            "Document": pdf_data,
+            "FileName": file_name
+        }
+        resp_pdf = requests.post(pdf_url_api, headers=headers, json=payload_pdf)
+        print(f"Resposta ao enviar PDF: {resp_pdf.status_code} - {resp_pdf.text}")
+        results["pdf"] = resp_pdf.json()
+
+    # Se mensagem, imagem e PDF
+    if msg and image_url and pdf_url:
         # Envia imagem
         response = requests.get(image_url)
         if response.status_code != 200:
@@ -87,6 +108,64 @@ async def send_message_via_http(
         resp_img = requests.post(image_url_api, headers=headers, json=payload_img)
         print(f"Resposta ao enviar imagem: {resp_img.status_code} - {resp_img.text}")
         results["image"] = resp_img.json()
+
+        # Envia PDF
+        send_pdf(pdf_url)
+
+        # Envia mensagem de texto
+        if msg_id is None:
+            msg_id = uuid.uuid4().hex.upper()
+        payload_text = {
+            "Phone": phone_number,
+            "Body": msg,
+            "Id": msg_id
+        }
+        if context_info:
+            payload_text["ContextInfo"] = context_info
+        resp_text = requests.post(text_url, headers=headers, json=payload_text)
+        print(f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
+        results["text"] = resp_text.json()
+        return results
+
+    # Se mensagem e imagem
+    elif msg and image_url:
+        response = requests.get(image_url)
+        if response.status_code != 200:
+            raise Exception(f"Erro ao baixar imagem: {response.status_code}")
+        content_type = response.headers.get("Content-Type", "image/jpeg")
+        img_base64 = base64.b64encode(response.content).decode("utf-8")
+        if content_type == "image/png":
+            img_data = f"data:image/png;base64,{img_base64}"
+        else:
+            img_data = f"data:image/jpeg;base64,{img_base64}"
+
+        payload_img = {
+            "Phone": phone_number,
+            "Image": img_data
+        }
+        resp_img = requests.post(image_url_api, headers=headers, json=payload_img)
+        print(f"Resposta ao enviar imagem: {resp_img.status_code} - {resp_img.text}")
+        results["image"] = resp_img.json()
+
+        # Envia mensagem de texto
+        if msg_id is None:
+            msg_id = uuid.uuid4().hex.upper()
+        payload_text = {
+            "Phone": phone_number,
+            "Body": msg,
+            "Id": msg_id
+        }
+        if context_info:
+            payload_text["ContextInfo"] = context_info
+        resp_text = requests.post(text_url, headers=headers, json=payload_text)
+        print(f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
+        results["text"] = resp_text.json()
+        return results
+
+    # Se mensagem e PDF
+    elif msg and pdf_url:
+        # Envia PDF
+        send_pdf(pdf_url)
 
         # Envia mensagem de texto
         if msg_id is None:
@@ -123,6 +202,11 @@ async def send_message_via_http(
         print(f"Resposta ao enviar imagem: {resp.status_code} - {resp.text}")
         return resp.json()
 
+    # Se apenas PDF
+    elif pdf_url:
+        send_pdf(pdf_url)
+        return results["pdf"]
+
     # Se apenas texto
     else:
         if msg_id is None:
@@ -155,9 +239,17 @@ async def process_campaigns():
         for campaign_id, message in campaigns:
             print(f"📢 Processando campanha {campaign_id}")
 
-            # 2. Busca clientes da campanha ainda não enviados, incluindo nome_cliente, produto_recomendado, percentual_desconto e validade_desconto
+            # Buscar percentual_desconto e validade_desconto da tabela campaigns
             cursor.execute("""
-                SELECT cc.client_id, cl."TELEFONE", cl.nome_cliente, cl.produto_recomendado, cc.percentual_desconto, cc.validade_desconto
+                SELECT discount_percentage, discount_days FROM campaigns WHERE id = %s
+            """, (campaign_id,))
+            campaign_data = cursor.fetchone()
+            percentual_desconto = campaign_data[0] if campaign_data else None
+            validade_desconto = campaign_data[1] if campaign_data else None
+
+            # 2. Busca clientes da campanha ainda não enviados, incluindo nome_cliente e produto_recomendado
+            cursor.execute("""
+                SELECT cc.client_id, cl."TELEFONE", cl.nome_cliente, cl.produto_recomendado
                 FROM campaign_clients cc
                 JOIN clientes_classificados cl ON cl.id = cc.client_id
                 WHERE cc.campaign_id = %s AND cc.status IS DISTINCT FROM 'sent'
@@ -174,10 +266,9 @@ async def process_campaigns():
             image_url = image[0] if image else None
 
             # 4. Envia mensagens
-            for client_id, phone, nome_cliente, produto_recomendado, percentual_desconto, validade_desconto in clients:
+            for client_id, phone, nome_cliente, produto_recomendado in clients:
                 normalized_phone = normalize_phone(phone)
                 if not normalized_phone:
-                    # log_message(f"Telefone inválido para client_id {client_id}: {phone}")
                     continue  # pula para o próximo cliente
 
                 primeiro_nome = nome_cliente.split()[0] if nome_cliente else ""

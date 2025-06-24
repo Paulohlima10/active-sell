@@ -71,15 +71,15 @@ async def send_message_via_http(
     results = {}
 
     # Função auxiliar para envio de PDF
-    def send_pdf():
-        if not pdf_url or not isinstance(pdf_url, str):
+    def send_pdf(pdf_url_to_send):
+        if not pdf_url_to_send or not isinstance(pdf_url_to_send, str):
             raise Exception("pdf_url inválido ou não fornecido")
-        response = requests.get(pdf_url)
+        response = requests.get(pdf_url_to_send)
         if response.status_code != 200:
             raise Exception(f"Erro ao baixar PDF: {response.status_code}")
         pdf_base64 = base64.b64encode(response.content).decode("utf-8")
         pdf_data = f"data:application/octet-stream;base64,{pdf_base64}"
-        file_name = os.path.basename(pdf_url)
+        file_name = os.path.basename(pdf_url_to_send)
         payload_pdf = {
             "Phone": phone_number,
             "Document": pdf_data,
@@ -111,7 +111,7 @@ async def send_message_via_http(
         results["image"] = resp_img.json()
 
         # Envia PDF
-        send_pdf()
+        send_pdf(pdf_url)
 
         # Envia mensagem de texto
         if msg_id is None:
@@ -167,7 +167,7 @@ async def send_message_via_http(
     # Se mensagem e PDF
     elif msg and pdf_url:
         # Envia PDF
-        send_pdf()
+        send_pdf(pdf_url)
 
         # Envia mensagem de texto
         if msg_id is None:
@@ -206,7 +206,7 @@ async def send_message_via_http(
 
     # Se apenas PDF
     elif pdf_url:
-        send_pdf()
+        send_pdf(pdf_url)
         return results["pdf"]
 
     # Se apenas texto
@@ -233,7 +233,7 @@ async def process_campaigns(campaign_id):
     try:
         # Busca dados da campanha específica
         cursor.execute("""
-            SELECT id, message, start_date, end_date, daily_limit
+            SELECT id, message, start_date, end_date, daily_limit, discount_percentage, discount_days
             FROM campaigns
             WHERE id = %s
         """, (campaign_id,))
@@ -243,7 +243,7 @@ async def process_campaigns(campaign_id):
             print(f"⚠️ Campanha {campaign_id} não encontrada.")
             return
 
-        campaign_id, message, start_date, end_date, daily_limit = campaign
+        campaign_id, message, start_date, end_date, daily_limit, percentual_desconto, validade_desconto = campaign
 
         # Se o end_date for uma data (sem hora) ou se quiser garantir até o fim do dia:
         if isinstance(end_date, datetime):
@@ -319,7 +319,9 @@ async def process_campaigns(campaign_id):
                 variables = {
                     "nome_cliente": primeiro_nome,
                     "produto_recomendado": produto_recomendado or "",
-                    "link_personalizado": f"https://seusite.com/compra/{client_id}"
+                    "link_personalizado": f"https://seusite.com/compra/{client_id}",
+                    "percentual_desconto": percentual_desconto or "",
+                    "validade_desconto": validade_desconto or ""
                 }
 
                 response = await send_message_via_http(
