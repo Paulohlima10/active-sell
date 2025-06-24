@@ -71,10 +71,13 @@ async def send_message_via_http(
 
     # Função auxiliar para envio de PDF
     def send_pdf(pdf_url_to_send):
+        print(f"Enviando PDF: {pdf_url_to_send}")
         if not pdf_url_to_send or not isinstance(pdf_url_to_send, str):
+            print(f"pdf_url inválido ou não fornecido: {pdf_url_to_send}")
             raise Exception("pdf_url inválido ou não fornecido")
         response = requests.get(pdf_url_to_send)
         if response.status_code != 200:
+            print(f"Erro ao baixar PDF: {response.status_code}")
             raise Exception(f"Erro ao baixar PDF: {response.status_code}")
         pdf_base64 = base64.b64encode(response.content).decode("utf-8")
         pdf_data = f"data:application/octet-stream;base64,{pdf_base64}"
@@ -265,6 +268,15 @@ async def process_campaigns():
             image = cursor.fetchone()
             image_url = image[0] if image else None
 
+            # 3b. Verifica se há PDF vinculado
+            cursor.execute("""
+                SELECT file_url FROM campaign_files
+                WHERE campaign_id = %s AND file_type = 'pdf'
+                ORDER BY created_at DESC LIMIT 1
+            """, (campaign_id,))
+            pdf = cursor.fetchone()
+            pdf_url = pdf[0] if pdf else None
+
             # 4. Envia mensagens
             for client_id, phone, nome_cliente, produto_recomendado in clients:
                 normalized_phone = normalize_phone(phone)
@@ -280,7 +292,22 @@ async def process_campaigns():
                     "validade_desconto": validade_desconto or ""
                 }
 
-                response = await send_message_via_http(normalized_phone, message, image_url, variables=variables)
+                # Envia mensagem, imagem e PDF se existirem
+                if message and image_url and pdf_url:
+                    response = await send_message_via_http(normalized_phone, message, image_url=image_url, pdf_url=pdf_url, variables=variables)
+                elif message and image_url:
+                    response = await send_message_via_http(normalized_phone, message, image_url=image_url, variables=variables)
+                elif message and pdf_url:
+                    response = await send_message_via_http(normalized_phone, message, pdf_url=pdf_url, variables=variables)
+                elif message:
+                    response = await send_message_via_http(normalized_phone, message, variables=variables)
+                elif image_url:
+                    response = await send_message_via_http(normalized_phone, image_url=image_url)
+                elif pdf_url:
+                    response = await send_message_via_http(normalized_phone, pdf_url=pdf_url)
+                else:
+                    continue
+
                 print(f"→ Enviado para {normalized_phone}: {response}")
 
                 # Atualiza status da campanha

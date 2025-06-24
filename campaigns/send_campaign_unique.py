@@ -324,13 +324,22 @@ async def process_campaigns(campaign_id):
                     "validade_desconto": validade_desconto or ""
                 }
 
-                response = await send_message_via_http(
-                    normalized_phone,
-                    message,
-                    image_url=image_url,
-                    pdf_url=pdf_url,
-                    variables=variables
-                )
+                # Envia mensagem, imagem e PDF se existirem
+                if message and image_url and pdf_url:
+                    response = await send_message_via_http(normalized_phone, message, image_url=image_url, pdf_url=pdf_url, variables=variables)
+                elif message and image_url:
+                    response = await send_message_via_http(normalized_phone, message, image_url=image_url, variables=variables)
+                elif message and pdf_url:
+                    response = await send_message_via_http(normalized_phone, message, pdf_url=pdf_url, variables=variables)
+                elif message:
+                    response = await send_message_via_http(normalized_phone, message, variables=variables)
+                elif image_url:
+                    response = await send_message_via_http(normalized_phone, image_url=image_url)
+                elif pdf_url:
+                    response = await send_message_via_http(normalized_phone, pdf_url=pdf_url)
+                else:
+                    continue
+
                 print(f"→ Enviado para {normalized_phone}: {response}")
 
                 cursor.execute("""
