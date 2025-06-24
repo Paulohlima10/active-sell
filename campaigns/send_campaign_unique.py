@@ -283,7 +283,7 @@ async def process_campaigns(campaign_id):
                 print(f"✅ Todas as mensagens da campanha {campaign_id} já foram enviadas.")
                 break
 
-            # Busca arquivos vinculados (imagem)
+            # Busca imagem vinculada
             cursor.execute("""
                 SELECT file_url FROM campaign_files
                 WHERE campaign_id = %s AND file_type = 'image'
@@ -292,7 +292,7 @@ async def process_campaigns(campaign_id):
             image = cursor.fetchone()
             image_url = image[0] if image else None
 
-            # 3b. Verifica se há PDF vinculado
+            # Busca PDF vinculado
             cursor.execute("""
                 SELECT file_url FROM campaign_files
                 WHERE campaign_id = %s AND file_type = 'pdf'
