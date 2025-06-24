@@ -1,0 +1,7 @@
+.activesellenv/
+activesellenv/
+__pycache__/
+asset/
+app.log
+.env
+Knowledge/

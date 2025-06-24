@@ -1,0 +1,11 @@
+typing
+fastapi
+pydantic
+pathlib
+evolutionapi
+uvicorn
+asyncpg
+supabase
+mysql-connector-python
+pandas
+psycopg2
