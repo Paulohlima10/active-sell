@@ -298,6 +298,15 @@ async def process_campaigns(campaign_id):
                 elif file_type == 'pdf' and not pdf_url:
                     pdf_url = file_url
 
+            # 3b. Verifica se há PDF vinculado
+            cursor.execute("""
+                SELECT file_url FROM campaign_files
+                WHERE campaign_id = %s AND file_type = 'pdf'
+                ORDER BY created_at DESC LIMIT 1
+            """, (campaign_id,))
+            pdf = cursor.fetchone()
+            pdf_url = pdf[0] if pdf else None
+
             # Calcula intervalo aleatório entre envios
             seconds_in_day = 60 * 60 * 12  # 12 horas úteis para disparo
             interval = seconds_in_day // max(1, len(clients))
