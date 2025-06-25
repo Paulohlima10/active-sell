@@ -54,7 +54,7 @@ async def send_message_via_http(
     token="9C84DC7EBCC6-4B17-8625-A4A60018AC03",
     text_url=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/text",
     image_url_api=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/image",
-    pdf_url_api=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/document"  # NOVO ENDPOINT
+    pdf_url_api=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/document" 
 ):
     headers = {
         "Token": token,
@@ -72,6 +72,7 @@ async def send_message_via_http(
 
     # Função auxiliar para envio de PDF
     def send_pdf(pdf_url_to_send):
+        print(f"Enviando PDF: {pdf_url_to_send}")
         if not pdf_url_to_send or not isinstance(pdf_url_to_send, str):
             raise Exception("pdf_url inválido ou não fornecido")
         response = requests.get(pdf_url_to_send)
@@ -291,6 +292,7 @@ async def process_campaigns(campaign_id):
             """, (campaign_id,))
             image = cursor.fetchone()
             image_url = image[0] if image else None
+            print(f"Imagem vinculada: {image_url}")
 
             # Busca PDF vinculado
             cursor.execute("""
@@ -300,6 +302,7 @@ async def process_campaigns(campaign_id):
             """, (campaign_id,))
             pdf = cursor.fetchone()
             pdf_url = pdf[0] if pdf else None
+            print(f"PDF vinculado: {pdf_url}")
 
             # Calcula intervalo aleatório entre envios
             seconds_in_day = 60 * 60 * 12  # 12 horas úteis para disparo
