@@ -228,7 +228,7 @@ async def send_message_via_http(
 
 # === PROCESSAMENTO DE CAMPANHAS ===
 async def process_campaigns(campaign_id):
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
     conn = get_connection()
     cursor = conn.cursor()
 
