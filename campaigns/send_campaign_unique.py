@@ -272,7 +272,7 @@ async def process_campaigns(campaign_id):
 
             # Busca clientes ainda não enviados para hoje
             cursor.execute("""
-                SELECT cc.client_id, cl."TELEFONE", cl.nome_cliente, cl.produto_recomendado
+                SELECT cc.client_id, cl."TELEFONE", cl.nome_cliente, cl.produto_recomendado, cl.segundo_produto, cl.terceiro_produto
                 FROM campaign_clients cc
                 JOIN clientes_classificados cl ON cl.id = cc.client_id
                 WHERE cc.campaign_id = %s AND cc.status IS DISTINCT FROM 'sent'
@@ -284,15 +284,6 @@ async def process_campaigns(campaign_id):
             if not clients:
                 print(f"✅ Todas as mensagens da campanha {campaign_id} já foram enviadas.")
                 break
-
-            cursor.execute("SELECT * FROM campaign_files")
-            print(f"Arquivos da campanha {campaign_id}: {cursor.fetchall()}")
-
-            cursor.execute("SELECT * FROM campaign_files WHERE campaign_id = %s", (campaign_id,))
-            print(f"Arquivos da campanha 2 {campaign_id}: {cursor.fetchall()}")
-
-            cursor.execute("SELECT * FROM campaign_files WHERE file_type ILIKE 'pdf'")
-            print(f"Arquivos da campanha 3 {campaign_id}: {cursor.fetchall()}")
 
             # Busca imagem vinculada
             cursor.execute("""
@@ -312,7 +303,6 @@ async def process_campaigns(campaign_id):
             """, (campaign_id,))
             pdf = cursor.fetchone()
             pdf_url = pdf[0] if pdf else None
-            print(f"PDF vinculado: {pdf_url}")
 
             # Calcula intervalo aleatório entre envios
             seconds_in_day = 60 * 60 * 12  # 12 horas úteis para disparo
@@ -322,7 +312,7 @@ async def process_campaigns(campaign_id):
 
             sent_today = 0
 
-            for client_id, phone, nome_cliente, produto_recomendado in clients:
+            for client_id, phone, nome_cliente, produto_recomendado, segundo_produto, terceiro_produto in clients:
                 if not ilimitado and sent_today >= daily_limit:
                     print(f"🔒 Limite diário atingido para campanha {campaign_id}.")
                     break
@@ -337,7 +327,9 @@ async def process_campaigns(campaign_id):
                     "produto_recomendado": produto_recomendado or "",
                     "link_personalizado": f"https://seusite.com/compra/{client_id}",
                     "percentual_desconto": percentual_desconto or "",
-                    "validade_desconto": validade_desconto or ""
+                    "validade_desconto": validade_desconto or "",
+                    "segundo_produto": segundo_produto or "",
+                    "terceiro_produto": terceiro_produto or ""
                 }
 
                 # Envia mensagem, imagem e PDF se existirem

@@ -252,7 +252,7 @@ async def process_campaigns():
 
             # 2. Busca clientes da campanha ainda não enviados, incluindo nome_cliente e produto_recomendado
             cursor.execute("""
-                SELECT cc.client_id, cl."TELEFONE", cl.nome_cliente, cl.produto_recomendado
+                SELECT cc.client_id, cl."TELEFONE", cl.nome_cliente, cl.produto_recomendado, cl.segundo_produto, cl.terceiro_produto
                 FROM campaign_clients cc
                 JOIN clientes_classificados cl ON cl.id = cc.client_id
                 WHERE cc.campaign_id = %s AND cc.status IS DISTINCT FROM 'sent'
@@ -278,7 +278,7 @@ async def process_campaigns():
             pdf_url = pdf[0] if pdf else None
 
             # 4. Envia mensagens
-            for client_id, phone, nome_cliente, produto_recomendado in clients:
+            for client_id, phone, nome_cliente, produto_recomendado, segundo_produto, terceiro_produto in clients:
                 normalized_phone = normalize_phone(phone)
                 if not normalized_phone:
                     continue  # pula para o próximo cliente
@@ -289,7 +289,9 @@ async def process_campaigns():
                     "produto_recomendado": produto_recomendado or "",
                     "link_personalizado": f"https://seusite.com/compra/{client_id}",
                     "percentual_desconto": percentual_desconto or "",
-                    "validade_desconto": validade_desconto or ""
+                    "validade_desconto": validade_desconto or "",
+                    "segundo_produto": segundo_produto or "",
+                    "terceiro_produto": terceiro_produto or ""
                 }
 
                 # Envia mensagem, imagem e PDF se existirem
