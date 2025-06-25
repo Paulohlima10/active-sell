@@ -9,7 +9,7 @@ router = APIRouter()
 @router.post("/webhook_campaign")
 async def webhook_campaign(request: Request):
     data = await request.json()
-    print(data)
+    # print(data)
     await log_message("info", f"Dados: {data}")
 
     # Extrai o id da campanha do JSON recebido

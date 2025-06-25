@@ -44,7 +44,8 @@ def validate_tables_exist_pg(data: dict) -> Tuple[bool, Optional[str], List[str]
                     WHERE table_schema = %s AND table_name = %s
                 )
             """, (schema, table))
-            exists = cur.fetchone()[0]
+            result = cur.fetchone()
+            exists = result[0] if result is not None else False
             if not exists:
                 not_found.append(table)
         cur.close()

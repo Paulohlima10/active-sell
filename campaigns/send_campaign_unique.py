@@ -1,14 +1,13 @@
 import psycopg2
 from datetime import datetime
 import requests
-# from logs.logging_config import log_message
+from logs.logging_config import log_message
 import os
 import uuid
 import base64
 import asyncio
 import re
 import random
-import time
 
 
 # === CONFIGURAÇÕES ===
@@ -72,11 +71,13 @@ async def send_message_via_http(
 
     # Função auxiliar para envio de PDF
     def send_pdf(pdf_url_to_send):
-        print(f"Enviando PDF: {pdf_url_to_send}")
+        asyncio.create_task(log_message("info", f"Enviando PDF: {pdf_url_to_send}"))
         if not pdf_url_to_send or not isinstance(pdf_url_to_send, str):
+            asyncio.create_task(log_message("error", "pdf_url inválido ou não fornecido"))
             raise Exception("pdf_url inválido ou não fornecido")
         response = requests.get(pdf_url_to_send)
         if response.status_code != 200:
+            asyncio.create_task(log_message("error", f"Erro ao baixar PDF: {response.status_code}"))
             raise Exception(f"Erro ao baixar PDF: {response.status_code}")
         pdf_base64 = base64.b64encode(response.content).decode("utf-8")
         pdf_data = f"data:application/octet-stream;base64,{pdf_base64}"
@@ -87,7 +88,7 @@ async def send_message_via_http(
             "FileName": file_name
         }
         resp_pdf = requests.post(pdf_url_api, headers=headers, json=payload_pdf)
-        print(f"Resposta ao enviar PDF: {resp_pdf.status_code} - {resp_pdf.text}")
+        asyncio.create_task(log_message("info", f"Resposta ao enviar PDF: {resp_pdf.status_code} - {resp_pdf.text}"))
         results["pdf"] = resp_pdf.json()
 
     # Se mensagem, imagem e PDF
@@ -95,6 +96,7 @@ async def send_message_via_http(
         # Envia imagem
         response = requests.get(image_url)
         if response.status_code != 200:
+            await log_message("error", f"Erro ao baixar imagem: {response.status_code}")
             raise Exception(f"Erro ao baixar imagem: {response.status_code}")
         content_type = response.headers.get("Content-Type", "image/jpeg")
         img_base64 = base64.b64encode(response.content).decode("utf-8")
@@ -108,7 +110,7 @@ async def send_message_via_http(
             "Image": img_data
         }
         resp_img = requests.post(image_url_api, headers=headers, json=payload_img)
-        print(f"Resposta ao enviar imagem: {resp_img.status_code} - {resp_img.text}")
+        await log_message("info", f"Resposta ao enviar imagem: {resp_img.status_code} - {resp_img.text}")
         results["image"] = resp_img.json()
 
         # Envia PDF
@@ -125,7 +127,7 @@ async def send_message_via_http(
         if context_info:
             payload_text["ContextInfo"] = context_info
         resp_text = requests.post(text_url, headers=headers, json=payload_text)
-        print(f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
+        await log_message("info", f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
         results["text"] = resp_text.json()
         return results
 
@@ -134,6 +136,7 @@ async def send_message_via_http(
         # ...código já existente para imagem e mensagem...
         response = requests.get(image_url)
         if response.status_code != 200:
+            await log_message("error", f"Erro ao baixar imagem: {response.status_code}")
             raise Exception(f"Erro ao baixar imagem: {response.status_code}")
         content_type = response.headers.get("Content-Type", "image/jpeg")
         img_base64 = base64.b64encode(response.content).decode("utf-8")
@@ -147,7 +150,7 @@ async def send_message_via_http(
             "Image": img_data
         }
         resp_img = requests.post(image_url_api, headers=headers, json=payload_img)
-        print(f"Resposta ao enviar imagem: {resp_img.status_code} - {resp_img.text}")
+        await log_message("info", f"Resposta ao enviar imagem: {resp_img.status_code} - {resp_img.text}")
         results["image"] = resp_img.json()
 
         # Envia mensagem de texto
@@ -161,7 +164,7 @@ async def send_message_via_http(
         if context_info:
             payload_text["ContextInfo"] = context_info
         resp_text = requests.post(text_url, headers=headers, json=payload_text)
-        print(f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
+        await log_message("info", f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
         results["text"] = resp_text.json()
         return results
 
@@ -181,7 +184,7 @@ async def send_message_via_http(
         if context_info:
             payload_text["ContextInfo"] = context_info
         resp_text = requests.post(text_url, headers=headers, json=payload_text)
-        print(f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
+        await log_message("info", f"Resposta ao enviar mensagem de texto: {resp_text.status_code} - {resp_text.text}")
         results["text"] = resp_text.json()
         return results
 
@@ -189,6 +192,7 @@ async def send_message_via_http(
     elif image_url:
         response = requests.get(image_url)
         if response.status_code != 200:
+            await log_message("error", f"Erro ao baixar imagem: {response.status_code}")
             raise Exception(f"Erro ao baixar imagem: {response.status_code}")
         content_type = response.headers.get("Content-Type", "image/jpeg")
         img_base64 = base64.b64encode(response.content).decode("utf-8")
@@ -202,7 +206,7 @@ async def send_message_via_http(
             "Image": img_data
         }
         resp = requests.post(image_url_api, headers=headers, json=payload)
-        print(f"Resposta ao enviar imagem: {resp.status_code} - {resp.text}")
+        await log_message("info", f"Resposta ao enviar imagem: {resp.status_code} - {resp.text}")
         return resp.json()
 
     # Se apenas PDF
@@ -222,7 +226,7 @@ async def send_message_via_http(
         if context_info:
             payload["ContextInfo"] = context_info
         response = requests.post(text_url, headers=headers, json=payload)
-        print(f"Resposta ao enviar mensagem de texto: {response.status_code} - {response.text}")
+        await log_message("info", f"Resposta ao enviar mensagem de texto: {response.status_code} - {response.text}")
         return response.json()
 
 
@@ -242,7 +246,7 @@ async def process_campaigns(campaign_id):
         campaign = cursor.fetchone()
 
         if not campaign:
-            print(f"⚠️ Campanha {campaign_id} não encontrada.")
+            await log_message("info", f"⚠️ Campanha {campaign_id} não encontrada.")
             return
 
         campaign_id, message, start_date, end_date, daily_limit, percentual_desconto, validade_desconto = campaign
@@ -263,11 +267,11 @@ async def process_campaigns(campaign_id):
         while True:
             now = datetime.now()
             if now < start_date:
-                print(f"⏳ Campanha {campaign_id} ainda não começou. Aguardando início.")
+                await log_message("info", f"⏳ Campanha {campaign_id} ainda não começou. Aguardando início.")
                 await asyncio.sleep(60)
                 continue
             if now > end_date:
-                print(f"⏹️ Campanha {campaign_id} finalizada (data limite atingida).")
+                await log_message("info", f"⏹️ Campanha {campaign_id} finalizada (data limite atingida).")
                 break
 
             # Busca clientes ainda não enviados para hoje
@@ -282,7 +286,7 @@ async def process_campaigns(campaign_id):
             clients = cursor.fetchall()
 
             if not clients:
-                print(f"✅ Todas as mensagens da campanha {campaign_id} já foram enviadas.")
+                await log_message("info", f"✅ Todas as mensagens da campanha {campaign_id} já foram enviadas.")
                 break
 
             # Busca imagem vinculada
@@ -293,7 +297,7 @@ async def process_campaigns(campaign_id):
             """, (campaign_id,))
             image = cursor.fetchone()
             image_url = image[0] if image else None
-            print(f"Imagem vinculada: {image_url}")
+            await log_message("info", f"Imagem vinculada: {image_url}")
 
             # Busca PDF vinculado
             cursor.execute("""
@@ -303,6 +307,7 @@ async def process_campaigns(campaign_id):
             """, (campaign_id,))
             pdf = cursor.fetchone()
             pdf_url = pdf[0] if pdf else None
+            await log_message("info", f"PDF vinculado: {pdf_url}")
 
             # Calcula intervalo aleatório entre envios
             seconds_in_day = 60 * 60 * 12  # 12 horas úteis para disparo
@@ -314,7 +319,7 @@ async def process_campaigns(campaign_id):
 
             for client_id, phone, nome_cliente, produto_recomendado, segundo_produto, terceiro_produto in clients:
                 if not ilimitado and sent_today >= daily_limit:
-                    print(f"🔒 Limite diário atingido para campanha {campaign_id}.")
+                    await log_message("info", f"🔒 Limite diário atingido para campanha {campaign_id}.")
                     break
 
                 normalized_phone = normalize_phone(phone)
@@ -335,20 +340,24 @@ async def process_campaigns(campaign_id):
                 # Envia mensagem, imagem e PDF se existirem
                 if message and image_url and pdf_url:
                     response = await send_message_via_http(normalized_phone, message, image_url=image_url, pdf_url=pdf_url, variables=variables)
+                    await log_message("info", f"→ Enviado para {normalized_phone}: {response}")
                 elif message and image_url:
                     response = await send_message_via_http(normalized_phone, message, image_url=image_url, variables=variables)
+                    await log_message("info", f"→ Enviado para {normalized_phone}: {response}")
                 elif message and pdf_url:
                     response = await send_message_via_http(normalized_phone, message, pdf_url=pdf_url, variables=variables)
+                    await log_message("info", f"→ Enviado para {normalized_phone}: {response}")
                 elif message:
                     response = await send_message_via_http(normalized_phone, message, variables=variables)
+                    await log_message("info", f"→ Enviado para {normalized_phone}: {response}")
                 elif image_url:
                     response = await send_message_via_http(normalized_phone, image_url=image_url)
+                    await log_message("info", f"→ Enviado para {normalized_phone}: {response}")
                 elif pdf_url:
                     response = await send_message_via_http(normalized_phone, pdf_url=pdf_url)
+                    await log_message("info", f"→ Enviado para {normalized_phone}: {response}")
                 else:
                     continue
-
-                print(f"→ Enviado para {normalized_phone}: {response}")
 
                 cursor.execute("""
                     UPDATE campaign_clients
@@ -364,7 +373,7 @@ async def process_campaigns(campaign_id):
 
             # Após o loop, verifica se ainda há clientes para enviar amanhã
             if not ilimitado and sent_today < daily_limit:
-                print(f"✅ Todas as mensagens possíveis do dia foram enviadas para campanha {campaign_id}.")
+                await log_message("info", f"✅ Todas as mensagens possíveis do dia foram enviadas para campanha {campaign_id}.")
                 break
 
             # Aguarda até o próximo dia para continuar (apenas se houver limite)
@@ -373,17 +382,18 @@ async def process_campaigns(campaign_id):
                 from datetime import timedelta
                 tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=1, second=0, microsecond=0)
                 wait_seconds = (tomorrow - now).total_seconds()
-                print(f"⏳ Aguardando até o próximo dia para continuar campanha {campaign_id}...")
+                await log_message("info", f"⏳ Aguardando até o próximo dia para continuar campanha {campaign_id}...")
                 await asyncio.sleep(wait_seconds)
             else:
                 # Se ilimitado, encerra o loop após enviar todos
                 break
 
     except Exception as e:
-        print(f"⚠️ ERRO ao processar campanha {campaign_id}: {e}")
+        await log_message("error", f"⚠️ ERRO ao processar campanha {campaign_id}: {e}")
     finally:
         cursor.close()
         conn.close()
+
 # === EXECUÇÃO ===
 if __name__ == "__main__":
     campaign_id = "ba640034-ad3b-4d67-9dad-8a1297dd7659"

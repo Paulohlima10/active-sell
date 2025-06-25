@@ -100,7 +100,7 @@ class SalesAssistant:
             role=self.role,
             goal=self.goal,
             backstory=self.backstory,
-            tools=self.db_tools,
+            # tools=self.db_tools,
             knowledge=self.knowledge,
             verbose=True
         )
