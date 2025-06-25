@@ -284,6 +284,15 @@ async def process_campaigns(campaign_id):
                 print(f"✅ Todas as mensagens da campanha {campaign_id} já foram enviadas.")
                 break
 
+            cursor.execute("SELECT * FROM campaign_files")
+            print(f"Arquivos da campanha {campaign_id}: {cursor.fetchall()}")
+
+            cursor.execute("SELECT * FROM campaign_files WHERE campaign_id = %s", (campaign_id,))
+            print(f"Arquivos da campanha 2 {campaign_id}: {cursor.fetchall()}")
+
+            cursor.execute("SELECT * FROM campaign_files WHERE file_type ILIKE 'pdf'")
+            print(f"Arquivos da campanha 3 {campaign_id}: {cursor.fetchall()}")
+
             # Busca imagem vinculada
             cursor.execute("""
                 SELECT file_url FROM campaign_files
