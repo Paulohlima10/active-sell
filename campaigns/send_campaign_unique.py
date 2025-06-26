@@ -330,7 +330,7 @@ async def process_campaigns(campaign_id):
                 variables = {
                     "nome_cliente": primeiro_nome,
                     "produto_recomendado": produto_recomendado or "",
-                    "link_personalizado": f"https://seusite.com/compra/{client_id}",
+                    "link_personalizado": "https://activesell.net/loja",
                     "percentual_desconto": percentual_desconto or "",
                     "validade_desconto": validade_desconto or "",
                     "segundo_produto": segundo_produto or "",
