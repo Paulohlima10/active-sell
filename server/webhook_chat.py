@@ -7,6 +7,7 @@ from logs.logging_config import log_message
 import requests
 import base64
 import os
+from supabase import create_client
 
 
 router = APIRouter()
@@ -23,6 +24,10 @@ WHATSAPP_API_KEY = "132830D31E74-4F40-B8B3-AF27DC0D5B91"
 INSTANCE_ID = "ActiveSell"
 WHATSAPP_URL = "http://100.24.46.53:8080"
 EVOLUTION_API_TOKEN = "429683C4C977415CAAFCCE10F7D57E11"
+
+SUPABASE_URL = "https://gzzvydiznhwaxrahzkjt.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6enZ5ZGl6bmh3YXhyYWh6a2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc2NTY0NTAsImV4cCI6MjA2MzIzMjQ1MH0.q2WE3ct6Gf2K6mmxe8ioPhgnkXkdQLjlNHW3bQARsJc"
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 async def get_db_conn():
     await log_message("info", "webhook_chat - Abrindo conexão com o banco de dados")
@@ -110,6 +115,16 @@ async def send_image_via_http(
     resp = requests.post(url, headers=headers, json=payload)
     await log_message("info", f"webhook_chat - Resposta HTTP imagem: {resp.status_code} - {resp.text}")
     return resp.json()
+
+async def upload_image_to_supabase(base64_str, file_name):
+    img_bytes = base64.b64decode(base64_str)
+    now = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    file_path = f"whatsapp_images/{now}_{file_name}"
+    res = supabase.storage.from_('conversation-files').upload(file_path, img_bytes, file_options={"content-type": "image/jpeg"})
+    if not res:
+        raise Exception("Erro ao fazer upload da imagem no Supabase")
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
+    return public_url
 
 async def handle_messages_upsert(msg_data):
     await log_message("info", f"webhook_chat - Iniciando processamento de messages.upsert: {msg_data}")
@@ -227,7 +242,6 @@ async def handle_new_event_message(event_data):
     else:
         msg_dt = datetime.now(timezone.utc)
 
-    # Função para extrair o conteúdo da mensagem
     def extract_message_content(message):
         if "extendedTextMessage" in message:
             return message["extendedTextMessage"].get("text", "")
@@ -235,13 +249,26 @@ async def handle_new_event_message(event_data):
             return message.get("conversation", "")
         elif "imageMessage" in message:
             return message["imageMessage"].get("caption", "")
-        # Adicione outros tipos conforme necessário
         return ""
 
-    # Conteúdo da mensagem
-    content = extract_message_content(message)
+    # --- NOVA LÓGICA PARA BASE64 DE IMAGEM ---
+    base64_img = event_data.get("base64")
     file_url = None
     file_name = None
+    if base64_img:
+        file_name = event_data.get("fileName", f"{uuid.uuid4()}.jpeg")
+        file_url = await upload_image_to_supabase(base64_img, file_name)
+        message_type = "image"
+        content = ""
+    else:
+        content = extract_message_content(message)
+        if "imageMessage" in message:
+            file_url = message["imageMessage"].get("URL")
+            file_name = file_name or "imagem.jpg"
+            message_type = "image"
+        else:
+            file_url = None
+            file_name = None
 
     conn = await get_db_conn()
     try:
