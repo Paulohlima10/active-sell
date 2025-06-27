@@ -32,7 +32,7 @@ evo_client = EvolutionClient(
 )
 
 async def get_db_conn():
-    await log_message("info", "Abrindo conexão com o banco de dados")
+    await log_message("info", "webhook_chat - Abrindo conexão com o banco de dados")
     return await asyncpg.connect(
         host=DB_CONFIG["host"],
         port=DB_CONFIG["port"],
@@ -42,12 +42,12 @@ async def get_db_conn():
     )
 
 async def get_or_create_conversation(conn, client_id, client_name):
-    await log_message("info", f"Buscando ou criando conversa para client_id: {client_id}, client_name: {client_name}")
+    await log_message("info", f"webhook_chat - Buscando ou criando conversa para client_id: {client_id}, client_name: {client_name}")
     row = await conn.fetchrow(
         "SELECT id FROM conversations WHERE client_id = $1", client_id
     )
     if row:
-        await log_message("info", f"Conversa encontrada: {row['id']}")
+        await log_message("info", f"webhook_chat - Conversa encontrada: {row['id']}")
         return row["id"]
     conv_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -58,11 +58,11 @@ async def get_or_create_conversation(conn, client_id, client_name):
         """,
         conv_id, client_id, client_name, "online", now, now, now
     )
-    await log_message("info", f"Conversa criada: {conv_id}")
+    await log_message("info", f"webhook_chat - Conversa criada: {conv_id}")
     return conv_id
 
 async def send_whatsapp_message(phone_number, msg, image_url=None):
-    await log_message("info", f"Preparando para enviar mensagem para {phone_number} (imagem: {bool(image_url)})")
+    await log_message("info", f"webhook_chat - Preparando para enviar mensagem para {phone_number} (imagem: {bool(image_url)})")
     if image_url:
         message = MediaMessage(
             number=phone_number,
@@ -84,7 +84,7 @@ async def send_whatsapp_message(phone_number, msg, image_url=None):
             message=message,
             instance_token=WHATSAPP_API_KEY
         )
-    await log_message("info", f"Mensagem enviada para {phone_number}: {msg} response: {response}")
+    await log_message("info", f"webhook_chat - Mensagem enviada para {phone_number}: {msg} response: {response}")
     return response
 
 async def send_text_via_http(
@@ -95,7 +95,7 @@ async def send_text_via_http(
     token="9C84DC7EBCC6-4B17-8625-A4A60018AC03",
     url=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/text"
 ):
-    await log_message("info", f"Enviando mensagem HTTP para {phone_number}: {msg}")
+    await log_message("info", f"webhook_chat - Enviando mensagem HTTP para {phone_number}: {msg}")
     headers = {
         "Token": token,
         "Content-Type": "application/json"
@@ -110,7 +110,7 @@ async def send_text_via_http(
     if context_info:
         payload["ContextInfo"] = context_info
     response = requests.post(url, headers=headers, json=payload)
-    await log_message("info", f"Resposta HTTP: {response.status_code} - {response.text}")
+    await log_message("info", f"webhook_chat - Resposta envio de mensagem via HTTP: {response.status_code} - {response.text}")
     return response.json()
 
 async def send_image_via_http(
@@ -119,10 +119,10 @@ async def send_image_via_http(
     token="9C84DC7EBCC6-4B17-8625-A4A60018AC03",
     url=f"{os.getenv('WUZAPI_BASE_URL')}/chat/send/image"
 ):
-    await log_message("info", f"Baixando imagem para envio: {image_url}")
+    await log_message("info", f"webhook_chat - Baixando imagem para envio: {image_url}")
     response = requests.get(image_url)
     if response.status_code != 200:
-        await log_message("error", f"Erro ao baixar imagem: {response.status_code}")
+        await log_message("error", f"webhook_chat - Erro ao baixar imagem: {response.status_code}")
         raise Exception(f"Erro ao baixar imagem: {response.status_code}")
     content_type = response.headers.get("Content-Type", "image/jpeg")
     img_base64 = base64.b64encode(response.content).decode("utf-8")
@@ -139,13 +139,13 @@ async def send_image_via_http(
         "Token": token,
         "Content-Type": "application/json"
     }
-    await log_message("info", f"Enviando imagem para {phone_number}")
+    await log_message("info", f"webhook_chat - Enviando imagem para {phone_number}")
     resp = requests.post(url, headers=headers, json=payload)
-    await log_message("info", f"Resposta HTTP imagem: {resp.status_code} - {resp.text}")
+    await log_message("info", f"webhook_chat - Resposta HTTP imagem: {resp.status_code} - {resp.text}")
     return resp.json()
 
 async def handle_messages_upsert(msg_data):
-    await log_message("info", f"Iniciando processamento de messages.upsert: {msg_data}")
+    await log_message("info", f"webhook_chat - Iniciando processamento de messages.upsert: {msg_data}")
     remote_jid = msg_data.get("key", {}).get("remoteJid", "")
     phone_number = re.sub(r"@s\.whatsapp\.net$", "", remote_jid)
     client_name = msg_data.get("pushName", "Desconhecido")
@@ -186,7 +186,7 @@ async def handle_messages_upsert(msg_data):
         msg_id = str(uuid.uuid4())
         from_me = msg_data.get("key", {}).get("fromMe", False)
         sender = "agent" if from_me else "client"
-        await log_message("info", f"Inserindo mensagem no banco: {msg_id} para {phone_number}")
+        await log_message("info", f"webhook_chat - Inserindo mensagem no banco: {msg_id} para {phone_number}")
         await conn.execute(
             """
             INSERT INTO messages (
@@ -196,18 +196,18 @@ async def handle_messages_upsert(msg_data):
             """,
             msg_id, conversation_id, content, sender, True, message_type, file_url, file_name, msg_dt, "whatsapp"
         )
-        await log_message("info", f"Mensagem processada: {msg_id} para {phone_number} - {content}")
+        await log_message("info", f"webhook_chat - Mensagem processada: {msg_id} para {phone_number} - Conteudo: {content}")
     except Exception as e:
-        await log_message("error", f"Erro ao inserir mensagem: {e}")
+        await log_message("error", f"webhook_chat - Erro ao inserir mensagem: {e}")
         raise
     finally:
         await conn.close()
 
 async def handle_insert_message(record):
-    await log_message("info", f"Iniciando handle_insert_message para record: {record}")
+    await log_message("info", f"webhook_chat - Iniciando handle_insert_message para record: {record}")
     # Só envia se a mensagem NÃO veio do WhatsApp
     if record.get("source") == "whatsapp":
-        await log_message("info", "Mensagem ignorada pois veio do WhatsApp")
+        await log_message("info", "webhook_chat - Mensagem ignorada pois veio do WhatsApp")
         return
 
     conversation_id = record.get("conversation_id")
@@ -216,7 +216,7 @@ async def handle_insert_message(record):
 
     phone_number = None
     conn = await get_db_conn()
-    await log_message("info", f"Buscando conversa com ID: {conversation_id}")
+    await log_message("info", f"webhook_chat - Buscando conversa com ID: {conversation_id}")
     try:
         row = await conn.fetchrow(
             """
@@ -229,21 +229,21 @@ async def handle_insert_message(record):
         if row:
             phone_number = row["client_id"]
     except Exception as e:
-        await log_message("error", f"Erro ao buscar conversa: {e}")
+        await log_message("error", f"webhook_chat - Erro ao buscar conversa: {e}")
         raise
     finally:
         await conn.close()
 
     if phone_number:
         if image_url:
-            await log_message("info", f"Enviando imagem via HTTP para {phone_number}")
+            await log_message("info", f"webhook_chat - Enviando imagem via HTTP para {phone_number}")
             await send_image_via_http(phone_number, image_url) 
         else:
-            await log_message("info", f"Enviando texto via HTTP para {phone_number}")
+            await log_message("info", f"webhook_chat - Enviando texto via HTTP para {phone_number}")
             await send_text_via_http(phone_number, content)
 
 async def handle_new_event_message(event_data):
-    await log_message("info", f"Iniciando handle_new_event_message: {event_data}")
+    await log_message("info", f"webhook_chat - Iniciando handle_new_event_message: {event_data}")
     info = event_data.get("Info", {})
     message = event_data.get("Message", {})
     chat_jid = info.get("Chat", "")
@@ -255,7 +255,7 @@ async def handle_new_event_message(event_data):
         try:
             msg_dt = datetime.fromisoformat(message_timestamp.replace("Z", "+00:00"))
         except Exception:
-            await log_message("error", f"Erro ao converter timestamp: {message_timestamp}")
+            await log_message("error", f"webhook_chat - Erro ao converter timestamp: {message_timestamp}")
             msg_dt = datetime.now(timezone.utc)
     else:
         msg_dt = datetime.now(timezone.utc)
@@ -270,7 +270,7 @@ async def handle_new_event_message(event_data):
         conversation_id = await get_or_create_conversation(conn, phone_number, client_name)
         msg_id = str(uuid.uuid4())
         sender = "client" if not info.get("IsFromMe", False) else "agent"
-        await log_message("info", f"Inserindo mensagem (novo formato) no banco: {msg_id} para {phone_number}")
+        await log_message("info", f"webhook_chat - Inserindo mensagem (novo formato) no banco: {msg_id} para {phone_number}")
         await conn.execute(
             """
             INSERT INTO messages (
@@ -280,18 +280,18 @@ async def handle_new_event_message(event_data):
             """,
             msg_id, conversation_id, content, sender, True, message_type, file_url, file_name, msg_dt, "whatsapp"
         )
-        await log_message("info", f"Mensagem (novo formato) processada: {msg_id} para {phone_number} - {content}")
+        await log_message("info", f"webhook_chat - Mensagem (novo formato) processada: {msg_id} para {phone_number} - Conteudo: {content}")
     except Exception as e:
-        await log_message("error", f"Erro ao inserir mensagem (novo formato): {e}")
+        await log_message("error", f"webhook_chat - Erro ao inserir mensagem (novo formato): {e}")
         raise
     finally:
         await conn.close()
 
 @router.post("/webhook_chat")
 async def webhook_chat(request: Request):
-    await log_message("info", "Recebendo requisição no webhook_chat")
+    await log_message("info", "webhook_chat - Recebendo requisição no webhook_chat")
     data = await request.json()
-    await log_message("info", f"Payload recebido: {data}")
+    await log_message("info", f"webhook_chat - Payload recebido: {data}")
     # Evento padrão do WhatsApp
     if data.get("event") == "messages.upsert":
         msg_data = data.get("data", {})
