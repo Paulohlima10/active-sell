@@ -255,8 +255,8 @@ async def process_campaigns(campaign_id):
         if isinstance(end_date, datetime):
             end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        # Se daily_limit vier None, não limitar envios no dia
-        ilimitado = daily_limit is None
+        # Se daily_limit vier None ou negativo, não limitar envios no dia
+        ilimitado = daily_limit is None or (isinstance(daily_limit, int) and daily_limit < 0)
 
         # Corrige timezone para garantir comparação correta
         if start_date.tzinfo is not None:

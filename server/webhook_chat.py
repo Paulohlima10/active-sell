@@ -259,6 +259,7 @@ async def handle_new_event_message(event_data):
     base64_img = event_data.get("base64")
     file_url = None
     file_name = None
+
     if base64_img:
         file_name = event_data.get("fileName", f"{uuid.uuid4()}.jpeg")
         file_url = await upload_image_to_supabase(base64_img, file_name)
@@ -266,15 +267,8 @@ async def handle_new_event_message(event_data):
         content = ""
     else:
         content = extract_message_content(message)
-        if "imageMessage" in message:
-            if not file_url:
-                file_url = message["imageMessage"].get("URL")
-            file_name = file_name or "imagem.jpg"
-            message_type = "image"
-        else:
-            if not file_url:
-                file_url = None
-            file_name = None
+        file_url = None
+        file_name = None
 
     conn = await get_db_conn()
     try:
