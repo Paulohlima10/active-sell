@@ -25,8 +25,12 @@ INSTANCE_ID = "ActiveSell"
 WHATSAPP_URL = "http://100.24.46.53:8080"
 EVOLUTION_API_TOKEN = "429683C4C977415CAAFCCE10F7D57E11"
 
-SUPABASE_URL = "https://gzzvydiznhwaxrahzkjt.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6enZ5ZGl6bmh3YXhyYWh6a2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc2NTY0NTAsImV4cCI6MjA2MzIzMjQ1MH0.q2WE3ct6Gf2K6mmxe8ioPhgnkXkdQLjlNHW3bQARsJc"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("SUPABASE_URL e SUPABASE_KEY precisam estar definidos nas variáveis de ambiente.")
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 async def get_db_conn():
@@ -263,11 +267,13 @@ async def handle_new_event_message(event_data):
     else:
         content = extract_message_content(message)
         if "imageMessage" in message:
-            file_url = message["imageMessage"].get("URL")
+            if not file_url:
+                file_url = message["imageMessage"].get("URL")
             file_name = file_name or "imagem.jpg"
             message_type = "image"
         else:
-            file_url = None
+            if not file_url:
+                file_url = None
             file_name = None
 
     conn = await get_db_conn()
