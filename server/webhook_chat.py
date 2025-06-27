@@ -3,8 +3,6 @@ import uuid
 import asyncpg
 from fastapi import APIRouter, Request
 from datetime import datetime, timezone
-from evolutionapi.client import EvolutionClient
-from evolutionapi.models.message import TextMessage, MediaMessage, MediaType
 from logs.logging_config import log_message
 import requests
 import base64
@@ -25,11 +23,6 @@ WHATSAPP_API_KEY = "132830D31E74-4F40-B8B3-AF27DC0D5B91"
 INSTANCE_ID = "ActiveSell"
 WHATSAPP_URL = "http://100.24.46.53:8080"
 EVOLUTION_API_TOKEN = "429683C4C977415CAAFCCE10F7D57E11"
-
-evo_client = EvolutionClient(
-    base_url=WHATSAPP_URL,
-    api_token=EVOLUTION_API_TOKEN
-)
 
 async def get_db_conn():
     await log_message("info", "webhook_chat - Abrindo conexão com o banco de dados")
@@ -60,32 +53,6 @@ async def get_or_create_conversation(conn, client_id, client_name):
     )
     await log_message("info", f"webhook_chat - Conversa criada: {conv_id}")
     return conv_id
-
-async def send_whatsapp_message(phone_number, msg, image_url=None):
-    await log_message("info", f"webhook_chat - Preparando para enviar mensagem para {phone_number} (imagem: {bool(image_url)})")
-    if image_url:
-        message = MediaMessage(
-            number=phone_number,
-            mediatype=MediaType.IMAGE.value,
-            mimetype="image/jpeg",
-            caption=msg,
-            media=image_url,
-            fileName="imagem.jpg"
-        )
-        response = evo_client.messages.send_media(
-            instance_id=INSTANCE_ID,
-            message=message,
-            instance_token=WHATSAPP_API_KEY
-        )
-    else:
-        message = TextMessage(number=phone_number, text=msg, delay=1000)
-        response = evo_client.messages.send_text(
-            instance_id=INSTANCE_ID,
-            message=message,
-            instance_token=WHATSAPP_API_KEY
-        )
-    await log_message("info", f"webhook_chat - Mensagem enviada para {phone_number}: {msg} response: {response}")
-    return response
 
 async def send_text_via_http(
     phone_number,
@@ -247,7 +214,7 @@ async def handle_new_event_message(event_data):
     info = event_data.get("Info", {})
     message = event_data.get("Message", {})
     chat_jid = info.get("Chat", "")
-    phone_number = re.sub(r"@s\.whatsapp\.net$", "", chat_jid)
+    phone_number = re.sub(r"@s\\.whatsapp\\.net$", "", chat_jid)
     client_name = info.get("PushName", "Desconhecido")
     message_type = info.get("Type", "text")
     message_timestamp = info.get("Timestamp")
@@ -260,8 +227,19 @@ async def handle_new_event_message(event_data):
     else:
         msg_dt = datetime.now(timezone.utc)
 
+    # Função para extrair o conteúdo da mensagem
+    def extract_message_content(message):
+        if "extendedTextMessage" in message:
+            return message["extendedTextMessage"].get("text", "")
+        elif "conversation" in message:
+            return message.get("conversation", "")
+        elif "imageMessage" in message:
+            return message["imageMessage"].get("caption", "")
+        # Adicione outros tipos conforme necessário
+        return ""
+
     # Conteúdo da mensagem
-    content = message.get("conversation", "")
+    content = extract_message_content(message)
     file_url = None
     file_name = None
 

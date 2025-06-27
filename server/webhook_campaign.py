@@ -10,7 +10,7 @@ router = APIRouter()
 async def webhook_campaign(request: Request):
     data = await request.json()
     # print(data)
-    await log_message("info", f"Dados: {data}")
+    await log_message("info", f"webhook_campaign - Dados: {data}")
 
     # Extrai o id da campanha do JSON recebido
     campaign_id = data.get("record", {}).get("id")

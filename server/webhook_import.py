@@ -20,10 +20,10 @@ async def update_import_configuration(record_id, **fields):
 @router.post("/webhook_import")
 async def webhook_import(request: Request):
     data = await request.json()
-    await log_message("info", f"Dados recebidos: {data}")
+    await log_message("info", f"webhook_import - Dados recebidos: {data}")
 
     if data.get("type") != "INSERT":
-        await log_message("info", "Tipo não é INSERT, ignorando processamento sequencial.")
+        await log_message("info", "webhook_import - Tipo não é INSERT, ignorando processamento sequencial.")
         return {"message": "Tipo não é INSERT, nada a fazer."}
 
     record = data.get("record")
