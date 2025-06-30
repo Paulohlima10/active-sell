@@ -9,4 +9,4 @@ async def webhook_whatsapp_conect(request: Request):
     await log_message("info", f"Dados recebidos: {data}")
 
     print(data)
-    return {"message": "Dados recebidos com sucesso"}
+    return {"message": "Dados recebidos com sucesso!"}
