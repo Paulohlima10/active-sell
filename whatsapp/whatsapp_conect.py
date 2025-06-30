@@ -58,6 +58,7 @@ if __name__ == "__main__":
     nome_usuario = "teste"
     admin_token = "H4Zbhw72PBKdTIgS"
     status, resposta, token = criar_usuario(nome_usuario, admin_token)
+    print(token)
     print("Resposta criar_usuario:", status, resposta)
     if status == 200:
         status_conn, resposta_conn = conectar_usuario(token)
