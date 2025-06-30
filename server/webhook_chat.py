@@ -22,8 +22,6 @@ DB_CONFIG = {
 
 WHATSAPP_API_KEY = "132830D31E74-4F40-B8B3-AF27DC0D5B91"
 INSTANCE_ID = "ActiveSell"
-WHATSAPP_URL = "http://100.24.46.53:8080"
-EVOLUTION_API_TOKEN = "429683C4C977415CAAFCCE10F7D57E11"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -261,8 +259,10 @@ async def handle_new_event_message(event_data):
     file_name = None
 
     if base64_img:
+        await log_message("info", f"webhook_chat - Recebeu o base64 da imagem")
         file_name = event_data.get("fileName", f"{uuid.uuid4()}.jpeg")
         file_url = await upload_image_to_supabase(base64_img, file_name)
+        await log_message("info", f"webhook_chat - retorno do upload da imagem: {file_url}")
         message_type = "image"
         content = ""
     else:
