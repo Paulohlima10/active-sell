@@ -310,10 +310,14 @@ async def process_campaigns(campaign_id):
             await log_message("info", f"send_campaign_unique - PDF vinculado: {pdf_url}")
 
             # Calcula intervalo aleatório entre envios
-            seconds_in_day = 60 * 60 * 12  # 12 horas úteis para disparo
-            interval = seconds_in_day // max(1, len(clients))
-            min_interval = max(10, interval // 2)
-            max_interval = max(20, interval)
+            # seconds_in_day = 60 * 60 * 12  # 12 horas úteis para disparo
+            # interval = seconds_in_day // max(1, len(clients))
+            # min_interval = max(10, interval // 2)
+            # max_interval = max(20, interval)
+
+            # Intervalos fixos mínimos
+            min_interval = 10  # Mínimo de 3 segundos
+            max_interval = 20  # Máximo de 10 segundos
 
             sent_today = 0
 
