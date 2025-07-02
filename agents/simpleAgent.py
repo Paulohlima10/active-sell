@@ -11,7 +11,11 @@ import asyncio
 class SalesAssistant:
     def __init__(self, partner_code):
         # Configurar chave de API
-        os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key is not None:
+            os.environ["OPENAI_API_KEY"] = api_key
+        else:
+            print("AVISO: OPENAI_API_KEY não está definida nas variáveis de ambiente.")
 
         # Inicializar o gerenciador de histórico de chat
         self.chat_history = ChatHistoryManager()
@@ -39,7 +43,6 @@ class SalesAssistant:
         self.crew = Crew(
             agents=[self.sale_agent, self.classification_agent],
             tasks=[self.sale_task, self.classification_task],
-            language="pt",
             knowledge=self.knowledge,
             verbose=False
         )
@@ -55,14 +58,14 @@ class SalesAssistant:
         document_path2 = os.path.join(knowledge_path2, "document.txt")
 
         if os.path.exists(document_path2):
-            asyncio.create_task(log_queue.put(f"Atualizando base de conhecimento com o arquivo: {document_path}"))
+            asyncio.create_task(log_queue.put(("info", f"Atualizando base de conhecimento com o arquivo: {document_path}")))
             text_source = TextFileKnowledgeSource(file_paths=[document_path])
             self.knowledge = Knowledge(
                 collection_name=f"vendas_farmacia_{partner_code}",
                 sources=[text_source]
             )
         else:
-            asyncio.create_task(log_queue.put(f"O arquivo de conhecimento '{document_path}' não foi encontrado. Usando base de conhecimento vazia."))
+            asyncio.create_task(log_queue.put(("info", f"O arquivo de conhecimento '{document_path}' não foi encontrado. Usando base de conhecimento vazia.")))
             self.knowledge = Knowledge(
                 collection_name=f"vendas_farmacia_{partner_code}",
                 sources=[]
@@ -70,7 +73,6 @@ class SalesAssistant:
 
     def create_sale_agent(self):
         return Agent(
-            name=self.name,
             role=self.role,
             goal=self.goal,
             backstory=self.backstory,
@@ -80,7 +82,6 @@ class SalesAssistant:
 
     def create_classification_agent(self):
         return Agent(
-            name="Classificador de Estágio",
             role="Analisa o histórico da conversa e classifica o cliente no funil de vendas.",
             goal="Determinar se o cliente está na fase de prospecção, consideração ou decisão de compra.",
             backstory="Especialista em analisar comportamento do cliente.",
@@ -147,16 +148,16 @@ class SalesAssistant:
         """
         Lê um arquivo específico da base de conhecimento do parceiro e retorna o conteúdo.
         """
-        knowledge_path = os.path.join("assets", "partners", partner_code)
+        knowledge_path = os.path.join("knowledge", "partners", partner_code)
         file_path = os.path.join(knowledge_path, file_name)
 
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as file:
                 content = file.read().strip()
-                asyncio.create_task(log_queue.put(f"Conteúdo do arquivo '{file_name}' carregado para o parceiro '{partner_code}'"))
+                asyncio.create_task(log_queue.put(("info", f"Conteúdo do arquivo '{file_name}' carregado para o parceiro '{partner_code}'")))
                 return content
         else:
-            asyncio.create_task(log_queue.put(f"O arquivo '{file_name}' não foi encontrado para o parceiro '{partner_code}'.")) 
+            asyncio.create_task(log_queue.put(("info", f"O arquivo '{file_name}' não foi encontrado para o parceiro '{partner_code}'."))) 
             return f"Arquivo padrão: {file_name} não encontrado."
 
 

@@ -9,9 +9,9 @@ class SalesAssistantManager:
         if partner_code not in self.assistants:
             self.assistants[partner_code] = SalesAssistant(partner_code)
 
-            asyncio.create_task(log_queue.put(f"Assistente para o parceiro '{partner_code}' foi adicionado."))
+            asyncio.create_task(log_queue.put(("info", f"Assistente para o parceiro '{partner_code}' foi adicionado.")))
         else:
-            asyncio.create_task(log_queue.put(f"Assistente para o parceiro '{partner_code}' já existe."))
+            asyncio.create_task(log_queue.put(("info", f"Assistente para o parceiro '{partner_code}' já existe.")))
 
     def get_assistant(self, partner_code):
         return self.assistants.get(partner_code, None)
@@ -22,9 +22,9 @@ class SalesAssistantManager:
         """
         if partner_code in self.assistants:
             del self.assistants[partner_code]
-            asyncio.create_task(log_queue.put(f"Assistente para o parceiro '{partner_code}' foi removido."))
+            asyncio.create_task(log_queue.put(("info", f"Assistente para o parceiro '{partner_code}' foi removido.")))
         else:
-            asyncio.create_task(log_queue.put(f"Nenhum assistente encontrado para o parceiro '{partner_code}'."))
+            asyncio.create_task(log_queue.put(("info", f"Nenhum assistente encontrado para o parceiro '{partner_code}'.")))
 
 # Instância global do gerenciador de assistentes
 global_manager = SalesAssistantManager()
