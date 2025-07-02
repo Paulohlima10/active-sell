@@ -42,7 +42,7 @@ async def webhook_agent_config(request: Request):
             "task_description.txt": task_description
         }.items():
             with (partner_path / name).open("w", encoding="utf-8") as file:
-                file.write(value)
+                file.write(value if value is not None else "")
 
         await log_message("info", f"webhook_agent_config: Arquivos criados com sucesso para o parceiro '{partner}'.")
     except Exception as e:
