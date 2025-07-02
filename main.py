@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from server import webhook, create_knowledge, create_prompt, healthcheck, ask_agent, create_agents, webhook_chat, webhook_import, webhook_campaign, webhook_whatsapp_conect
+from server import webhook, create_knowledge, create_prompt, healthcheck, ask_agent, create_agents, webhook_chat, webhook_import, webhook_campaign, webhook_whatsapp_conect, webhook_agent_config
 from logs.logging_config import log_message, start_log_processor
 from logs.logs_api import router as logs_router
 import uvicorn  # Importando o uvicorn
@@ -22,6 +22,7 @@ app.include_router(logs_router)
 app.include_router(webhook_import.router)
 app.include_router(webhook_campaign.router)
 app.include_router(webhook_whatsapp_conect.router)
+app.include_router(webhook_agent_config.router)
 
 # Adicionando o bloco para rodar o servidor
 if __name__ == "__main__":
