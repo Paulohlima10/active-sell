@@ -6,7 +6,7 @@ router = APIRouter()
 @router.post("/webhook_agent_config")
 async def webhook_agent_config(request: Request):
     data = await request.json()
-    await log_message("info", f"Dados recebidos: {data}")
+    await log_message("info", f"webhook_agent_config: Dados recebidos: {data}")
 
     print(data)
     return {"message": "Dados recebidos com sucesso"}
