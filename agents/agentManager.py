@@ -26,6 +26,13 @@ class SalesAssistantManager:
         else:
             asyncio.create_task(log_queue.put(("info", f"Nenhum assistente encontrado para o parceiro '{partner_code}'.")))
 
+    def agent_exists(self, partner_code):
+        """
+        Verifica se existe um assistente para o partner_code fornecido.
+        Retorna True se existir, False caso contrário.
+        """
+        return partner_code in self.assistants
+
 # Instância global do gerenciador de assistentes
 global_manager = SalesAssistantManager()
 
