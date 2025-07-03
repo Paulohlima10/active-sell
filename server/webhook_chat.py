@@ -353,6 +353,11 @@ async def handle_new_event_message(event_data):
         raise
     finally:
         await conn.close()
+    
+    # 4. Enviar resposta do agente via WhatsApp
+    print(f"******** sender: {sender}")
+    if sender == "client":
+        await agent_responder(conversation_id, content)
 
 @router.post("/webhook_chat")
 async def webhook_chat(request: Request):
