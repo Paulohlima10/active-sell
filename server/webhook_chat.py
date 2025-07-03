@@ -244,6 +244,7 @@ async def handle_messages_upsert(msg_data):
         await conn.close()
     
     # 4. Enviar resposta do agente via WhatsApp
+    print(f"******** sender: {sender}")
     if sender == "client":
         await agent_responder(conversation_id, content)
 
