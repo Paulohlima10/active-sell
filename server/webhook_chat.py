@@ -1,13 +1,14 @@
 import re
 import uuid
 import asyncpg
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from datetime import datetime, timezone
 from logs.logging_config import log_message
 import requests
 import base64
 import os
 from supabase import create_client
+from agents.agentManager import global_manager
 
 
 router = APIRouter()
@@ -128,6 +129,60 @@ async def upload_image_to_supabase(base64_str, file_name):
     public_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
     return public_url
 
+# =============================
+# Função principal solicitada
+# =============================
+async def agent_responder(conversation_id: str, mensagem_cliente: str):
+    await log_message("info", f"agent_responder - Iniciando para conversation_id: {conversation_id}")
+    conn = await get_db_conn()
+    try:
+        # 1. Buscar client_id e empresa_id na tabela conversations
+        row = await conn.fetchrow(
+            "SELECT client_id, empresa_id FROM conversations WHERE id = $1",
+            conversation_id
+        )
+        if not row:
+            await log_message("error", f"agent_responder - Conversa não encontrada: {conversation_id}")
+            return {"error": "Conversa não encontrada"}
+        phone_number = row["client_id"]
+        # Extrair apenas o número antes do @, se houver
+        if isinstance(phone_number, str) and "@" in phone_number:
+            phone_number = phone_number.split("@")[0]
+        empresa_id = row["empresa_id"]
+
+        # 2. Verificar se o assistente está habilitado na ai_assistant_config
+        config = await conn.fetchrow(
+            "SELECT enabled FROM ai_assistant_config WHERE empresa_id = $1",
+            empresa_id
+        )
+        if not config or not config["enabled"]:
+            await log_message("info", f"agent_responder - Assistente desabilitado para empresa_id: {empresa_id}")
+            return {"error": "Assistente desabilitado para esta empresa."}
+
+        # 3. Perguntar ao agente
+        try:
+            assistent = global_manager.get_assistant(empresa_id)
+            if assistent is None:
+                assistent = global_manager.add_assistant(empresa_id)
+                await log_message("info", f"Assistente não encontrado para o parceiro '{empresa_id}' Criar agente.")
+            else:
+                response = assistent.ask_question(mensagem_cliente, conversation_id)
+                await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
+        except Exception as e:
+            await log_message("error", f"Erro ao perguntar ao assistente '{empresa_id}': {str(e)}")
+            return {"error": f"Erro ao perguntar ao assistente: {str(e)}"}
+
+        # 4. Enviar resposta do agente via WhatsApp
+        if phone_number:
+            await log_message("info", f"agent_responder - Enviando resposta do agente via WhatsApp para {phone_number}")
+            await send_text_via_http(phone_number, response)
+        return {"response": response}
+    except Exception as e:
+        await log_message("error", f"agent_responder - Erro geral: {str(e)}")
+        return {"error": str(e)}
+    finally:
+        await conn.close()
+
 async def handle_messages_upsert(msg_data):
     await log_message("info", f"webhook_chat - Iniciando processamento de messages.upsert: {msg_data}")
     remote_jid = msg_data.get("key", {}).get("remoteJid", "")
@@ -181,11 +236,16 @@ async def handle_messages_upsert(msg_data):
             msg_id, conversation_id, content, sender, True, message_type, file_url, file_name, msg_dt, "whatsapp"
         )
         await log_message("info", f"webhook_chat - Mensagem processada: {msg_id} para {phone_number} - Conteudo: {content}")
+
     except Exception as e:
         await log_message("error", f"webhook_chat - Erro ao inserir mensagem: {e}")
         raise
     finally:
         await conn.close()
+    
+    # 4. Enviar resposta do agente via WhatsApp
+    if sender == "client":
+        await agent_responder(conversation_id, content)
 
 async def handle_insert_message(record):
     await log_message("info", f"webhook_chat - Iniciando handle_insert_message para record: {record}")
@@ -225,6 +285,7 @@ async def handle_insert_message(record):
         else:
             await log_message("info", f"webhook_chat - Enviando texto via HTTP para {phone_number}")
             await send_text_via_http(phone_number, content)
+    
 
 async def handle_new_event_message(event_data):
     await log_message("info", f"webhook_chat - Iniciando handle_new_event_message: {event_data}")
@@ -313,3 +374,4 @@ async def webhook_chat(request: Request):
             await handle_insert_message(record)
 
     return {"message": "Dados recebidos com sucesso"}
+

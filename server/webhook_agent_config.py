@@ -12,9 +12,9 @@ async def webhook_agent_config(request: Request):
     partner = data.get("record", {}).get("empresa_id")
     name = data.get("record", {}).get("name")
     role = data.get("record", {}).get("role")
-    goal = data.get("record", {}).get("goal")
-    backstory = data.get("record", {}).get("backstory")
-    task_description = data.get("record", {}).get("task_description")
+    goal = data.get("record", {}).get("objective")
+    backstory = data.get("record", {}).get("context")
+    task_description = data.get("record", {}).get("task")
     content = data.get("record", {}).get("knowledge_base")
 
     # Cria o assistente se não existir
