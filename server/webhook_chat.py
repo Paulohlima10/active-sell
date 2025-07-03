@@ -136,9 +136,9 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
     await log_message("info", f"agent_responder - Iniciando para conversation_id: {conversation_id}")
     conn = await get_db_conn()
     try:
-        # 1. Buscar client_id e empresa_id na tabela conversations
+        # 1. Buscar client_id na tabela conversations
         row = await conn.fetchrow(
-            "SELECT client_id, empresa_id FROM conversations WHERE id = $1",
+            "SELECT client_id FROM conversations WHERE id = $1",
             conversation_id
         )
         if not row:
@@ -148,14 +148,17 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
         # Extrair apenas o número antes do @, se houver
         if isinstance(phone_number, str) and "@" in phone_number:
             phone_number = phone_number.split("@")[0]
-        empresa_id = row["empresa_id"]
 
-        # 2. Verificar se o assistente está habilitado na ai_assistant_config
+        # 2. Buscar empresa_id e enabled na tabela ai_assistant_config usando o número do telefone
         config = await conn.fetchrow(
-            "SELECT enabled FROM ai_assistant_config WHERE empresa_id = $1",
-            empresa_id
+            "SELECT empresa_id, enabled FROM ai_assistant_config WHERE client_id = $1",
+            phone_number
         )
-        if not config or not config["enabled"]:
+        if not config:
+            await log_message("info", f"agent_responder - Configuração do assistente não encontrada para client_id: {phone_number}")
+            return {"error": "Configuração do assistente não encontrada para este cliente."}
+        empresa_id = config["empresa_id"]
+        if not config["enabled"]:
             await log_message("info", f"agent_responder - Assistente desabilitado para empresa_id: {empresa_id}")
             return {"error": "Assistente desabilitado para esta empresa."}
 
