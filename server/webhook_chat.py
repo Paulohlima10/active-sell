@@ -41,7 +41,8 @@ async def get_db_conn():
         port=DB_CONFIG["port"],
         database=DB_CONFIG["database"],
         user=DB_CONFIG["user"],
-        password=DB_CONFIG["password"]
+        password=DB_CONFIG["password"],
+        statement_cache_size=0  # Desabilita prepared statements para evitar conflito com pgbouncer
     )
 
 async def get_or_create_conversation(conn, client_id, client_name):
