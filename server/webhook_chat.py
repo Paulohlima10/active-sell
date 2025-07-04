@@ -10,6 +10,8 @@ import os
 from supabase import create_client
 from agents.agentManager import global_manager
 
+# Desabilitar telemetria do ChromaDB para evitar erros
+os.environ["CHROMA_TELEMETRY"] = "false"
 
 router = APIRouter()
 

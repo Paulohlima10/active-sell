@@ -65,6 +65,8 @@ class ChatHistoryManager:
 
         return "\n".join(formatted_history)
 
+chat_history_global = ChatHistoryManager()
+
 # Exemplo de Uso
 if __name__ == "__main__":
     chat_manager = ChatHistoryManager()

@@ -1,11 +1,11 @@
 import os
 import json
 from crewai import Agent, Task, Crew
-from agents.ChatHistory import ChatHistoryManager
-from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
-from crewai import Knowledge
+from agents.ChatHistory import chat_history_global
 from logs.logging_config import log_queue
 import asyncio
+import chromadb
+from chromadb.api.types import IncludeEnum
 
 
 class SalesAssistant:
@@ -18,7 +18,7 @@ class SalesAssistant:
             print("AVISO: OPENAI_API_KEY não está definida nas variáveis de ambiente.")
 
         # Inicializar o gerenciador de histórico de chat
-        self.chat_history = ChatHistoryManager()
+        self.chat_history = chat_history_global
 
         # Configurar a base de conhecimento inicial
         self.partner_code = partner_code
@@ -43,40 +43,48 @@ class SalesAssistant:
         self.crew = Crew(
             agents=[self.sale_agent, self.classification_agent],
             tasks=[self.sale_task, self.classification_task],
-            knowledge=self.knowledge,
             verbose=False
         )
 
+        # ChromaDB: indexação única
+        self.collection_name = f"vendas_farmacia_{partner_code}"
+        self.chroma_client = chromadb.PersistentClient(path="db")
+        self.chroma_collection = self.chroma_client.get_or_create_collection(self.collection_name)
+        document_path = os.path.join("knowledge", "partners", partner_code, "document.txt")
+        if os.path.exists(document_path) and len(self.chroma_collection.get()['ids']) == 0:
+            with open(document_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                docs = [x.strip() for x in content.split("\n") if x.strip()]
+                ids = [str(i) for i in range(1, len(docs)+1)]
+                if docs:
+                    self.chroma_collection.add(documents=docs, ids=ids)
+
     def update_knowledge(self, partner_code):
         """
-        Atualiza a base de conhecimento com base no código do parceiro.
+        Atualiza a base de conhecimento do parceiro no ChromaDB, removendo todos os dados da coleção e inserindo novamente o conteúdo do arquivo document.txt.
         """
-        knowledge_path = os.path.join("partners", partner_code)
-        document_path = os.path.join(knowledge_path, "document.txt")
-
-        knowledge_path2 = os.path.join("knowledge", "partners", partner_code)
-        document_path2 = os.path.join(knowledge_path2, "document.txt")
-
-        if os.path.exists(document_path2):
-            asyncio.create_task(log_queue.put(("info", f"Atualizando base de conhecimento com o arquivo: {document_path}")))
-            text_source = TextFileKnowledgeSource(file_paths=[document_path])
-            self.knowledge = Knowledge(
-                collection_name=f"vendas_farmacia_{partner_code}",
-                sources=[text_source]
-            )
-        else:
-            asyncio.create_task(log_queue.put(("info", f"O arquivo de conhecimento '{document_path}' não foi encontrado. Usando base de conhecimento vazia.")))
-            self.knowledge = Knowledge(
-                collection_name=f"vendas_farmacia_{partner_code}",
-                sources=[]
-            )
+        collection_name = f"vendas_farmacia_{partner_code}"
+        document_path = os.path.join("knowledge", "partners", partner_code, "document.txt")
+        chroma_client = chromadb.PersistentClient(path="db")
+        chroma_collection = chroma_client.get_or_create_collection(collection_name)
+        # Apagar todos os dados da coleção
+        ids_existentes = chroma_collection.get()['ids']
+        if ids_existentes:
+            chroma_collection.delete(ids=ids_existentes)
+        # Inserir novamente o conteúdo do arquivo
+        if os.path.exists(document_path):
+            with open(document_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                docs = [x.strip() for x in content.split("\n") if x.strip()]
+                ids = [str(i) for i in range(1, len(docs)+1)]
+                if docs:
+                    chroma_collection.add(documents=docs, ids=ids)
 
     def create_sale_agent(self):
         return Agent(
             role=self.role,
             goal=self.goal,
             backstory=self.backstory,
-            knowledge=self.knowledge,
             verbose=False
         )
 
@@ -127,11 +135,26 @@ class SalesAssistant:
         return resposta
     
     def ask_question(self, question, client_id):
+        # Buscar contexto relevante no ChromaDB já indexado
+        results = self.chroma_collection.query(
+            query_texts=[question],
+            n_results=3,
+            include=[IncludeEnum.distances, IncludeEnum.documents]
+        )
+        docs = []
+        if results['documents'] and results['distances']:
+            for doc, dist in zip(results['documents'][0], results['distances'][0]):
+                if dist < 0.8:  # ajuste esse valor conforme necessário
+                    docs.append(doc)
+        contexto = "\n".join(docs)
+        if not contexto:
+            contexto = "Nenhuma informação relevante encontrada na base de conhecimento."
+
         # Executar a tarefa do CrewAI
         result = self.crew.kickoff(inputs={
             "question": question,
             "historico": self.chat_history.get_history_string(client_id),
-            "contexto": "contexto"
+            "contexto": contexto
         })
 
         # Processar a resposta
@@ -166,13 +189,12 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
+        client = chromadb.PersistentClient(path="db")
 
+        assistant = SalesAssistant("95aed0d0-303e-45cd-a37e-364bff24849f")  # Instancie só uma vez!
         while True:
-            assistant = SalesAssistant("00001")
-            if assistant:
-                question = input("Digite sua pergunta: ")
-                resposta = assistant.process_question(question, "1234")
-                print("\nResposta:", resposta)
-            
+            question = input("Digite sua pergunta: ")
+            resposta = assistant.ask_question(question, "1234")
+            print("\nResposta:", resposta)
 
     asyncio.run(main())
