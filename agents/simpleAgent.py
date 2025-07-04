@@ -5,7 +5,6 @@ from agents.ChatHistory import chat_history_global
 from logs.logging_config import log_queue
 import asyncio
 import chromadb
-from chromadb.api.types import IncludeEnum
 
 
 class SalesAssistant:
@@ -139,7 +138,7 @@ class SalesAssistant:
         results = self.chroma_collection.query(
             query_texts=[question],
             n_results=3,
-            include=[IncludeEnum.distances, IncludeEnum.documents]
+            include=["distances", "documents"]
         )
         docs = []
         if results['documents'] and results['distances']:
