@@ -136,46 +136,66 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
     await log_message("info", f"agent_responder - Iniciando para conversation_id: {conversation_id}")
     conn = await get_db_conn()
     try:
-        # 1. Buscar client_id na tabela conversations
+        # 1. Buscar client_id e empresa_id na tabela conversations
         row = await conn.fetchrow(
-            "SELECT client_id FROM conversations WHERE id = $1",
+            "SELECT client_id, empresa_id FROM conversations WHERE id = $1",
             conversation_id
         )
         if not row:
             await log_message("error", f"agent_responder - Conversa não encontrada: {conversation_id}")
             return {"error": "Conversa não encontrada"}
+        
         phone_number = row["client_id"]
         # Extrair apenas o número antes do @, se houver
         if isinstance(phone_number, str) and "@" in phone_number:
             phone_number = phone_number.split("@")[0]
+        
+        empresa_id = row["empresa_id"]
+        
+        # 2. Se empresa_id for null, buscar o empresa_id padrão da ai_assistant_config
+        if empresa_id is None:
+            config_row = await conn.fetchrow(
+                "SELECT empresa_id FROM ai_assistant_config LIMIT 1"
+            )
+            if config_row:
+                empresa_id = config_row["empresa_id"]
+                await log_message("info", f"agent_responder - Usando empresa_id padrão: {empresa_id}")
+            else:
+                await log_message("error", f"agent_responder - Nenhuma configuração encontrada na ai_assistant_config")
+                return {"error": "Nenhuma configuração de assistente encontrada."}
 
-        # 2. Buscar empresa_id e enabled na tabela ai_assistant_config usando o número do telefone
+        # 3. Verificar se o assistente está habilitado na ai_assistant_config
         config = await conn.fetchrow(
-            "SELECT empresa_id, enabled FROM ai_assistant_config WHERE client_id = $1",
-            phone_number
+            "SELECT enabled FROM ai_assistant_config WHERE empresa_id = $1",
+            empresa_id
         )
         if not config:
-            await log_message("info", f"agent_responder - Configuração do assistente não encontrada para client_id: {phone_number}")
-            return {"error": "Configuração do assistente não encontrada para este cliente."}
-        empresa_id = config["empresa_id"]
+            await log_message("info", f"agent_responder - Configuração não encontrada para empresa_id: {empresa_id}")
+            return {"error": "Configuração do assistente não encontrada para esta empresa."}
+        
         if not config["enabled"]:
             await log_message("info", f"agent_responder - Assistente desabilitado para empresa_id: {empresa_id}")
             return {"error": "Assistente desabilitado para esta empresa."}
 
-        # 3. Perguntar ao agente
+        # 4. Perguntar ao agente
         try:
             assistent = global_manager.get_assistant(empresa_id)
             if assistent is None:
-                assistent = global_manager.add_assistant(empresa_id)
+                global_manager.add_assistant(empresa_id)
+                assistent = global_manager.get_assistant(empresa_id)
                 await log_message("info", f"Assistente não encontrado para o parceiro '{empresa_id}' Criar agente.")
-            else:
-                response = assistent.ask_question(mensagem_cliente, conversation_id)
-                await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
+            
+            if assistent is None:
+                await log_message("error", f"Falha ao criar assistente para o parceiro '{empresa_id}'")
+                return {"error": f"Falha ao criar assistente para o parceiro '{empresa_id}'"}
+            
+            response = assistent.ask_question(mensagem_cliente, conversation_id)
+            await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
         except Exception as e:
             await log_message("error", f"Erro ao perguntar ao assistente '{empresa_id}': {str(e)}")
             return {"error": f"Erro ao perguntar ao assistente: {str(e)}"}
 
-        # 4. Enviar resposta do agente via WhatsApp
+        # 5. Enviar resposta do agente via WhatsApp
         if phone_number:
             await log_message("info", f"agent_responder - Enviando resposta do agente via WhatsApp para {phone_number}")
             await send_text_via_http(phone_number, response)
