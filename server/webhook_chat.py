@@ -164,6 +164,10 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
                 await log_message("error", f"agent_responder - Nenhuma configuração encontrada na ai_assistant_config")
                 return {"error": "Nenhuma configuração de assistente encontrada."}
 
+        # Converter empresa_id para string se for UUID
+        if empresa_id is not None:
+            empresa_id = str(empresa_id)
+
         # 3. Verificar se o assistente está habilitado na ai_assistant_config
         config = await conn.fetchrow(
             "SELECT enabled FROM ai_assistant_config WHERE empresa_id = $1",
