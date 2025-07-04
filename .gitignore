@@ -5,3 +5,4 @@ asset/
 app.log
 .env
 Knowledge/
+db/
