@@ -23,6 +23,14 @@ except ImportError:
     start_ec2_monitoring = None
     get_ec2_info = None
 
+# Importar monitor de memória
+try:
+    from utils.memory_monitor import memory_monitor
+    print("✅ Monitor de memória ativado")
+except ImportError:
+    print("Aviso: Monitor de memória não encontrado")
+    memory_monitor = None
+
 # Função assíncrona para inicializar o log
 async def initialize_log():
     await log_message("info", "Servidor iniciado...")

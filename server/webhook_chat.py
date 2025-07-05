@@ -200,14 +200,19 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
                 await log_message("error", f"Falha ao criar assistente para o parceiro '{empresa_id}'")
                 return {"error": f"Falha ao criar assistente para o parceiro '{empresa_id}'"}
             
-            # Usar versão assíncrona com timeout otimizado para EC2
+            # Usar versão assíncrona com timeout otimizado para CrewAI no EC2
             import asyncio
+            import gc
             try:
                 response = await asyncio.wait_for(
                     assistent.ask_question_async(mensagem_cliente, conversation_id),
-                    timeout=15.0  # 15 segundos de timeout para EC2
+                    timeout=12.0  # 12 segundos de timeout para CrewAI no EC2
                 )
                 await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
+                
+                # Forçar coleta de lixo após processamento
+                gc.collect()
+                
             except asyncio.TimeoutError:
                 await log_message("error", f"Timeout ao perguntar ao assistente '{empresa_id}'")
                 return {"error": "Timeout ao processar pergunta. Tente novamente."}

@@ -164,30 +164,37 @@ class SalesAssistant:
     
     async def ask_question_async(self, question, client_id):
         """
-        Versão assíncrona do ask_question para evitar bloqueios no event loop
+        Versão assíncrona otimizada para EC2 com CrewAI eficiente
         """
         try:
-            # Buscar contexto relevante no ChromaDB já indexado
-            results = self.chroma_collection.query(
-                query_texts=[question],
-                n_results=3,
-                include=["distances", "documents"]
-            )
-            docs = []
-            if results['documents'] and results['distances']:
-                for doc, dist in zip(results['documents'][0], results['distances'][0]):
-                    if dist < 0.8:  # ajuste esse valor conforme necessário
-                        docs.append(doc)
-            contexto = "\n".join(docs)
-            if not contexto:
-                contexto = "Nenhuma informação relevante encontrada na base de conhecimento."
+            # Buscar contexto relevante no ChromaDB (limitado a 1 resultado para economizar)
+            try:
+                results = self.chroma_collection.query(
+                    query_texts=[question],
+                    n_results=1,  # Limitado a 1 resultado para economizar memória
+                    include=["distances", "documents"]
+                )
+                docs = []
+                if results.get('documents') and results.get('distances'):
+                    for doc, dist in zip(results['documents'][0], results['distances'][0]):
+                        if dist < 0.8:
+                            docs.append(doc)
+                contexto = "\n".join(docs) if docs else "Informações básicas disponíveis."
+            except Exception as e:
+                print(f"Erro ao buscar contexto: {e}")
+                contexto = "Informações básicas disponíveis."
 
-            # Executar a tarefa do CrewAI em um thread separado para não bloquear o event loop
+            # Executar CrewAI em thread separada com timeout e retry
             def run_crew_kickoff():
                 try:
+                    # Limitar histórico para economizar memória (muito conservador)
+                    historico_limitado = self.chat_history.get_history_string(client_id)
+                    if len(historico_limitado) > 500:  # Limitar a 500 caracteres
+                        historico_limitado = historico_limitado[-500:]
+                    
                     return self.crew.kickoff(inputs={
                         "question": question,
-                        "historico": self.chat_history.get_history_string(client_id),
+                        "historico": historico_limitado,
                         "contexto": contexto
                     })
                 except Exception as e:
@@ -198,19 +205,19 @@ class SalesAssistant:
                         "Classificacao": "Prospecção"
                     })
             
-            # Executar em thread separado com retry
+            # Executar em thread separada com timeout muito conservador
             loop = asyncio.get_event_loop()
-            max_retries = 2
-            for attempt in range(max_retries):
+            max_retries = 1  # Apenas 1 retry para economizar recursos
+            for attempt in range(max_retries + 1):
                 try:
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         result = await loop.run_in_executor(executor, run_crew_kickoff)
                     break
                 except Exception as e:
                     print(f"Tentativa {attempt + 1} falhou: {e}")
-                    if attempt == max_retries - 1:
+                    if attempt == max_retries:
                         raise e
-                    await asyncio.sleep(1)  # Esperar 1 segundo antes de tentar novamente
+                    await asyncio.sleep(0.5)  # Esperar 0.5 segundos antes de tentar novamente
 
             # Processar a resposta
             try:
@@ -220,8 +227,11 @@ class SalesAssistant:
                 resposta = f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}"
 
             # Atualizar o histórico de chat
-            self.chat_history.add_message(client_id, "user", question)
-            self.chat_history.add_message(client_id, "assistant", resposta)
+            try:
+                self.chat_history.add_message(client_id, "user", question)
+                self.chat_history.add_message(client_id, "assistant", resposta)
+            except Exception as e:
+                print(f"Erro ao atualizar histórico: {e}")
 
             return resposta
             
@@ -229,8 +239,11 @@ class SalesAssistant:
             print(f"Erro no ask_question_async: {e}")
             # Resposta de fallback em caso de erro
             fallback_response = f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}"
-            self.chat_history.add_message(client_id, "user", question)
-            self.chat_history.add_message(client_id, "assistant", fallback_response)
+            try:
+                self.chat_history.add_message(client_id, "user", question)
+                self.chat_history.add_message(client_id, "assistant", fallback_response)
+            except:
+                pass
             return fallback_response
     
     def ask_question(self, question, client_id):
