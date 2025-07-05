@@ -6,6 +6,7 @@ from logs.logging_config import log_queue
 import asyncio
 import chromadb
 import atexit
+import concurrent.futures
 
 # Desabilitar telemetria do ChromaDB para evitar erros
 os.environ["CHROMA_TELEMETRY"] = "false"
@@ -159,7 +160,81 @@ class SalesAssistant:
 
         return resposta
     
+    async def ask_question_async(self, question, client_id):
+        """
+        Versão assíncrona do ask_question para evitar bloqueios no event loop
+        """
+        try:
+            # Buscar contexto relevante no ChromaDB já indexado
+            results = self.chroma_collection.query(
+                query_texts=[question],
+                n_results=3,
+                include=["distances", "documents"]
+            )
+            docs = []
+            if results['documents'] and results['distances']:
+                for doc, dist in zip(results['documents'][0], results['distances'][0]):
+                    if dist < 0.8:  # ajuste esse valor conforme necessário
+                        docs.append(doc)
+            contexto = "\n".join(docs)
+            if not contexto:
+                contexto = "Nenhuma informação relevante encontrada na base de conhecimento."
+
+            # Executar a tarefa do CrewAI em um thread separado para não bloquear o event loop
+            def run_crew_kickoff():
+                try:
+                    return self.crew.kickoff(inputs={
+                        "question": question,
+                        "historico": self.chat_history.get_history_string(client_id),
+                        "contexto": contexto
+                    })
+                except Exception as e:
+                    print(f"Erro no CrewAI kickoff: {e}")
+                    # Retornar resposta de fallback
+                    return json.dumps({
+                        "Resposta": f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}",
+                        "Classificacao": "Prospecção"
+                    })
+            
+            # Executar em thread separado com retry
+            loop = asyncio.get_event_loop()
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        result = await loop.run_in_executor(executor, run_crew_kickoff)
+                    break
+                except Exception as e:
+                    print(f"Tentativa {attempt + 1} falhou: {e}")
+                    if attempt == max_retries - 1:
+                        raise e
+                    await asyncio.sleep(1)  # Esperar 1 segundo antes de tentar novamente
+
+            # Processar a resposta
+            try:
+                resposta_json = json.loads(str(result))
+                resposta = resposta_json.get("Resposta", "Erro ao obter resposta")
+            except json.JSONDecodeError:
+                resposta = f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}"
+
+            # Atualizar o histórico de chat
+            self.chat_history.add_message(client_id, "user", question)
+            self.chat_history.add_message(client_id, "assistant", resposta)
+
+            return resposta
+            
+        except Exception as e:
+            print(f"Erro no ask_question_async: {e}")
+            # Resposta de fallback em caso de erro
+            fallback_response = f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}"
+            self.chat_history.add_message(client_id, "user", question)
+            self.chat_history.add_message(client_id, "assistant", fallback_response)
+            return fallback_response
+    
     def ask_question(self, question, client_id):
+        """
+        Versão síncrona mantida para compatibilidade
+        """
         # Buscar contexto relevante no ChromaDB já indexado
         results = self.chroma_collection.query(
             query_texts=[question],

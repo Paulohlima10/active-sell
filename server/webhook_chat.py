@@ -196,8 +196,17 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
                 await log_message("error", f"Falha ao criar assistente para o parceiro '{empresa_id}'")
                 return {"error": f"Falha ao criar assistente para o parceiro '{empresa_id}'"}
             
-            response = assistent.ask_question(mensagem_cliente, conversation_id)
-            await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
+            # Usar versão assíncrona com timeout para evitar bloqueio do event loop
+            import asyncio
+            try:
+                response = await asyncio.wait_for(
+                    assistent.ask_question_async(mensagem_cliente, conversation_id),
+                    timeout=30.0  # 30 segundos de timeout
+                )
+                await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
+            except asyncio.TimeoutError:
+                await log_message("error", f"Timeout ao perguntar ao assistente '{empresa_id}'")
+                return {"error": "Timeout ao processar pergunta. Tente novamente."}
         except Exception as e:
             await log_message("error", f"Erro ao perguntar ao assistente '{empresa_id}': {str(e)}")
             return {"error": f"Erro ao perguntar ao assistente: {str(e)}"}
