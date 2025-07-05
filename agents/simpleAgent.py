@@ -20,6 +20,12 @@ class SalesAssistant:
             os.environ["OPENAI_API_KEY"] = api_key
         else:
             print("AVISO: OPENAI_API_KEY não está definida nas variáveis de ambiente.")
+        
+        # Configurações otimizadas para EC2
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["OPENBLAS_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
+        os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
         # Inicializar o gerenciador de histórico de chat
         self.chat_history = chat_history_global
@@ -72,9 +78,9 @@ class SalesAssistant:
         """
         try:
             if hasattr(self, 'chroma_client'):
-                # Tentar limpar recursos do ChromaDB
-                if hasattr(self.chroma_client, 'reset'):
-                    self.chroma_client.reset()
+                # ChromaDB não precisa de limpeza explícita
+                # O garbage collector cuidará da limpeza
+                pass
         except Exception as e:
             print(f"Erro durante limpeza do SalesAssistant: {e}")
 
@@ -99,12 +105,8 @@ class SalesAssistant:
                 if docs:
                     chroma_collection.add(documents=docs, ids=ids)
         
-        # Limpar recursos do ChromaDB temporário
-        try:
-            if hasattr(chroma_client, 'reset'):
-                chroma_client.reset()
-        except Exception as e:
-            print(f"Erro durante limpeza do ChromaDB temporário: {e}")
+        # ChromaDB temporário será limpo automaticamente pelo garbage collector
+        # Não é necessário limpeza explícita
 
     def create_sale_agent(self):
         return Agent(

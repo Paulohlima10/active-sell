@@ -42,7 +42,11 @@ async def get_db_conn():
         database=DB_CONFIG["database"],
         user=DB_CONFIG["user"],
         password=DB_CONFIG["password"],
-        statement_cache_size=0  # Desabilita prepared statements para evitar conflito com pgbouncer
+        statement_cache_size=0,  # Desabilita prepared statements para evitar conflito com pgbouncer
+        command_timeout=10,  # Timeout mais conservador para EC2
+        server_settings={
+            'application_name': 'active-sell-ec2'
+        }
     )
 
 async def get_or_create_conversation(conn, client_id, client_name):
@@ -196,12 +200,12 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
                 await log_message("error", f"Falha ao criar assistente para o parceiro '{empresa_id}'")
                 return {"error": f"Falha ao criar assistente para o parceiro '{empresa_id}'"}
             
-            # Usar versão assíncrona com timeout para evitar bloqueio do event loop
+            # Usar versão assíncrona com timeout otimizado para EC2
             import asyncio
             try:
                 response = await asyncio.wait_for(
                     assistent.ask_question_async(mensagem_cliente, conversation_id),
-                    timeout=30.0  # 30 segundos de timeout
+                    timeout=15.0  # 15 segundos de timeout para EC2
                 )
                 await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
             except asyncio.TimeoutError:

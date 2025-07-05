@@ -9,6 +9,7 @@ O aviso `resource_tracker: There appear to be 1 leaked semaphore objects to clea
 1. **ChromaDB**: O ChromaDB usa multiprocessing internamente e pode não liberar recursos adequadamente
 2. **CrewAI**: A biblioteca CrewAI pode criar processos internos que não são limpos
 3. **Tarefas assíncronas**: `asyncio.create_task()` sem await pode deixar tarefas pendentes
+4. **Reset do ChromaDB**: Tentativas de reset do ChromaDB podem causar erros de configuração
 
 ## Soluções Implementadas
 
@@ -28,25 +29,29 @@ def cleanup(self):
     """
     try:
         if hasattr(self, 'chroma_client'):
-            # Tentar limpar recursos do ChromaDB
-            if hasattr(self.chroma_client, 'reset'):
-                self.chroma_client.reset()
+            # ChromaDB não precisa de limpeza explícita
+            # O garbage collector cuidará da limpeza automaticamente
+            pass
     except Exception as e:
         print(f"Erro durante limpeza do SalesAssistant: {e}")
 ```
 
-### 3. Registro de Função de Limpeza
+### 3. Correção do Erro do ChromaDB
+
+O erro "Reset is disabled by config" foi resolvido removendo as tentativas de reset do ChromaDB, já que o garbage collector cuida da limpeza automaticamente.
+
+### 4. Registro de Função de Limpeza
 
 ```python
 # No construtor do SalesAssistant
 atexit.register(self.cleanup)
 ```
 
-### 4. Utilitário de Limpeza de Recursos
+### 5. Utilitário de Limpeza de Recursos
 
 Criado `utils/resource_cleanup.py` para gerenciar limpeza centralizada.
 
-### 5. Shutdown Handler no FastAPI
+### 6. Shutdown Handler no FastAPI
 
 ```python
 async def cleanup_resources():
@@ -117,10 +122,11 @@ def __del__(self):
 
 ## Arquivos Modificados
 
-1. `agents/simpleAgent.py` - Adicionado método de limpeza
+1. `agents/simpleAgent.py` - Adicionado método de limpeza e correção do erro do ChromaDB
 2. `main.py` - Configuração de telemetria e shutdown handler
 3. `utils/resource_cleanup.py` - Utilitário de limpeza (novo)
 4. `testes/teste_cleanup.py` - Script de teste (novo)
+5. `testes/teste_chromadb_cleanup.py` - Script de teste específico para ChromaDB (novo)
 
 ## Monitoramento
 
@@ -138,6 +144,9 @@ Se o aviso persistir, pode ser necessário investigar outras bibliotecas ou impl
 ```bash
 # Testar limpeza de recursos
 python testes/teste_cleanup.py
+
+# Testar ChromaDB especificamente
+python testes/teste_chromadb_cleanup.py
 
 # Executar servidor com debug
 python main.py

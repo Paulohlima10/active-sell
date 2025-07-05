@@ -55,8 +55,9 @@ def setup_chromadb_cleanup():
     def chromadb_cleanup():
         try:
             import chromadb
-            # Tentar limpar recursos do ChromaDB
-            print("Limpando recursos do ChromaDB...")
+            # ChromaDB não precisa de limpeza explícita
+            # O garbage collector cuidará da limpeza
+            print("ChromaDB será limpo automaticamente pelo garbage collector...")
         except Exception as e:
             print(f"Erro ao limpar ChromaDB: {e}")
     
