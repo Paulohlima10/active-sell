@@ -176,9 +176,12 @@ class SalesAssistant:
                 )
                 docs = []
                 if results.get('documents') and results.get('distances'):
-                    for doc, dist in zip(results['documents'][0], results['distances'][0]):
-                        if dist < 0.8:
-                            docs.append(doc)
+                    documents = results['documents']
+                    distances = results['distances']
+                    if documents and distances and len(documents) > 0 and len(distances) > 0:
+                        for doc, dist in zip(documents[0], distances[0]):
+                            if dist < 0.8:
+                                docs.append(doc)
                 contexto = "\n".join(docs) if docs else "Informações básicas disponíveis."
             except Exception as e:
                 print(f"Erro ao buscar contexto: {e}")
