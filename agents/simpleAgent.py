@@ -5,6 +5,10 @@ from agents.ChatHistory import chat_history_global
 from logs.logging_config import log_queue
 import asyncio
 import chromadb
+import atexit
+
+# Desabilitar telemetria do ChromaDB para evitar erros
+os.environ["CHROMA_TELEMETRY"] = "false"
 
 
 class SalesAssistant:
@@ -57,6 +61,21 @@ class SalesAssistant:
                 ids = [str(i) for i in range(1, len(docs)+1)]
                 if docs:
                     self.chroma_collection.add(documents=docs, ids=ids)
+        
+        # Registrar função de limpeza para ser executada no shutdown
+        atexit.register(self.cleanup)
+
+    def cleanup(self):
+        """
+        Método para limpar recursos e evitar vazamentos de semáforos
+        """
+        try:
+            if hasattr(self, 'chroma_client'):
+                # Tentar limpar recursos do ChromaDB
+                if hasattr(self.chroma_client, 'reset'):
+                    self.chroma_client.reset()
+        except Exception as e:
+            print(f"Erro durante limpeza do SalesAssistant: {e}")
 
     def update_knowledge(self, partner_code):
         """
@@ -78,6 +97,13 @@ class SalesAssistant:
                 ids = [str(i) for i in range(1, len(docs)+1)]
                 if docs:
                     chroma_collection.add(documents=docs, ids=ids)
+        
+        # Limpar recursos do ChromaDB temporário
+        try:
+            if hasattr(chroma_client, 'reset'):
+                chroma_client.reset()
+        except Exception as e:
+            print(f"Erro durante limpeza do ChromaDB temporário: {e}")
 
     def create_sale_agent(self):
         return Agent(

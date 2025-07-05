@@ -3,12 +3,33 @@ from server import webhook, create_knowledge, create_prompt, healthcheck, ask_ag
 from logs.logging_config import log_message, start_log_processor
 from logs.logs_api import router as logs_router
 import uvicorn  # Importando o uvicorn
+import os
+
+# Configurações para evitar vazamentos de recursos
+os.environ["CHROMA_TELEMETRY"] = "false"
+
+# Importar utilitário de limpeza de recursos
+try:
+    from utils.resource_cleanup import resource_cleanup
+except ImportError:
+    print("Aviso: Utilitário de limpeza de recursos não encontrado")
+    resource_cleanup = None
 
 # Função assíncrona para inicializar o log
 async def initialize_log():
     await log_message("info", "Servidor iniciado...")
 
-app = FastAPI(on_startup=[start_log_processor, initialize_log])
+# Função para limpar recursos no shutdown
+async def cleanup_resources():
+    await log_message("info", "Limpando recursos...")
+    # Forçar limpeza de recursos se o utilitário estiver disponível
+    if resource_cleanup:
+        resource_cleanup.force_cleanup()
+
+app = FastAPI(
+    on_startup=[start_log_processor, initialize_log],
+    on_shutdown=[cleanup_resources]
+)
 
 # Incluindo os endpoints
 app.include_router(webhook.router)
