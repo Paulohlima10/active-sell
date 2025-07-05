@@ -10,3 +10,5 @@ mysql-connector-python
 pandas
 psycopg2
 crewai
+psutil
+requests
