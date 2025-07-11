@@ -204,10 +204,7 @@ async def agent_responder(conversation_id: str, mensagem_cliente: str):
             import asyncio
             import gc
             try:
-                response = await asyncio.wait_for(
-                    assistent.ask_question_async(mensagem_cliente, conversation_id),
-                    timeout=12.0  # 12 segundos de timeout para CrewAI no EC2
-                )
+                response = assistent.ask_question(mensagem_cliente, conversation_id)
                 await log_message("info", f"Pergunta feita ao assistente '{empresa_id}': {mensagem_cliente}")
                 
                 # Forçar coleta de lixo após processamento

@@ -2,15 +2,11 @@ import os
 import json
 from crewai import Agent, Task, Crew
 from agents.ChatHistory import chat_history_global
-from logs.logging_config import log_queue
+from agents.knowledgeManager import KnowledgeManager
+from agents.promptManager import PromptManager
 import asyncio
-import chromadb
 import atexit
 import concurrent.futures
-
-# Desabilitar telemetria do ChromaDB para evitar erros
-os.environ["CHROMA_TELEMETRY"] = "false"
-
 
 class SalesAssistant:
     def __init__(self, partner_code):
@@ -20,26 +16,11 @@ class SalesAssistant:
             os.environ["OPENAI_API_KEY"] = api_key
         else:
             print("AVISO: OPENAI_API_KEY não está definida nas variáveis de ambiente.")
-        
-        # Configurações otimizadas para EC2
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["OPENBLAS_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
-        os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-        # Inicializar o gerenciador de histórico de chat
+        # Inicializar gerenciadores
         self.chat_history = chat_history_global
-
-        # Configurar a base de conhecimento inicial
-        self.partner_code = partner_code
-        self.update_knowledge(partner_code)
-
-        # Carregar os arquivos da base de conhecimento
-        self.role = self.load_file(partner_code, "role.txt")
-        self.goal = self.load_file(partner_code, "goal.txt")
-        self.backstory = self.load_file(partner_code, "backstory.txt")
-        self.name = self.load_file(partner_code, "name.txt")
-        self.task_description = self.load_file(partner_code, "task_description.txt")
+        self.knowledge_manager = KnowledgeManager(partner_code)
+        self.prompt_manager = PromptManager(partner_code)
 
         # Configurar agentes
         self.sale_agent = self.create_sale_agent()
@@ -56,63 +37,11 @@ class SalesAssistant:
             verbose=False
         )
 
-        # ChromaDB: indexação única
-        self.collection_name = f"vendas_farmacia_{partner_code}"
-        self.chroma_client = chromadb.PersistentClient(path="db")
-        self.chroma_collection = self.chroma_client.get_or_create_collection(self.collection_name)
-        document_path = os.path.join("knowledge", "partners", partner_code, "document.txt")
-        if os.path.exists(document_path) and len(self.chroma_collection.get()['ids']) == 0:
-            with open(document_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                docs = [x.strip() for x in content.split("\n") if x.strip()]
-                ids = [str(i) for i in range(1, len(docs)+1)]
-                if docs:
-                    self.chroma_collection.add(documents=docs, ids=ids)
-        
-        # Registrar função de limpeza para ser executada no shutdown
-        atexit.register(self.cleanup)
-
-    def cleanup(self):
-        """
-        Método para limpar recursos e evitar vazamentos de semáforos
-        """
-        try:
-            if hasattr(self, 'chroma_client'):
-                # ChromaDB não precisa de limpeza explícita
-                # O garbage collector cuidará da limpeza
-                pass
-        except Exception as e:
-            print(f"Erro durante limpeza do SalesAssistant: {e}")
-
-    def update_knowledge(self, partner_code):
-        """
-        Atualiza a base de conhecimento do parceiro no ChromaDB, removendo todos os dados da coleção e inserindo novamente o conteúdo do arquivo document.txt.
-        """
-        collection_name = f"vendas_farmacia_{partner_code}"
-        document_path = os.path.join("knowledge", "partners", partner_code, "document.txt")
-        chroma_client = chromadb.PersistentClient(path="db")
-        chroma_collection = chroma_client.get_or_create_collection(collection_name)
-        # Apagar todos os dados da coleção
-        ids_existentes = chroma_collection.get()['ids']
-        if ids_existentes:
-            chroma_collection.delete(ids=ids_existentes)
-        # Inserir novamente o conteúdo do arquivo
-        if os.path.exists(document_path):
-            with open(document_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                docs = [x.strip() for x in content.split("\n") if x.strip()]
-                ids = [str(i) for i in range(1, len(docs)+1)]
-                if docs:
-                    chroma_collection.add(documents=docs, ids=ids)
-        
-        # ChromaDB temporário será limpo automaticamente pelo garbage collector
-        # Não é necessário limpeza explícita
-
     def create_sale_agent(self):
         return Agent(
-            role=self.role,
-            goal=self.goal,
-            backstory=self.backstory,
+            role=self.prompt_manager.role,
+            goal=self.prompt_manager.goal,
+            backstory=self.prompt_manager.backstory,
             verbose=False
         )
 
@@ -126,7 +55,7 @@ class SalesAssistant:
 
     def create_sale_task(self):
         return Task(
-            description=self.task_description,
+            description=self.prompt_manager.task_description,
             expected_output=json.dumps({
                 "Resposta": "resposta do agente Vendedor",
                 "Classificacao": "Prospecção"
@@ -143,130 +72,11 @@ class SalesAssistant:
             }),
             agent=self.classification_agent
         )
-
-    def process_question(self, question, phone_number):
-        # Executar a tarefa do CrewAI
-        result = self.crew.kickoff(inputs={
-            "question": question,
-            "historico": self.chat_history.get_history_string(phone_number),
-            "contexto": "contexto"
-        })
-
-        # Processar a resposta
-        resposta_json = json.loads(str(result))
-        resposta = resposta_json.get("Resposta", "Erro ao obter resposta")
-
-        # Atualizar o histórico de chat
-        self.chat_history.add_message(phone_number, "user", question)
-        self.chat_history.add_message(phone_number, "assistant", resposta)
-
-        return resposta
-    
-    async def ask_question_async(self, question, client_id):
-        """
-        Versão assíncrona otimizada para EC2 com CrewAI eficiente
-        """
-        try:
-            # Buscar contexto relevante no ChromaDB (limitado a 1 resultado para economizar)
-            try:
-                results = self.chroma_collection.query(
-                    query_texts=[question],
-                    n_results=1,  # Limitado a 1 resultado para economizar memória
-                    include=["distances", "documents"]
-                )
-                docs = []
-                if results.get('documents') and results.get('distances'):
-                    documents = results['documents']
-                    distances = results['distances']
-                    if documents and distances and len(documents) > 0 and len(distances) > 0:
-                        for doc, dist in zip(documents[0], distances[0]):
-                            if dist < 0.8:
-                                docs.append(doc)
-                contexto = "\n".join(docs) if docs else "Informações básicas disponíveis."
-            except Exception as e:
-                print(f"Erro ao buscar contexto: {e}")
-                contexto = "Informações básicas disponíveis."
-
-            # Executar CrewAI em thread separada com timeout e retry
-            def run_crew_kickoff():
-                try:
-                    # Limitar histórico para economizar memória (muito conservador)
-                    historico_limitado = self.chat_history.get_history_string(client_id)
-                    if len(historico_limitado) > 500:  # Limitar a 500 caracteres
-                        historico_limitado = historico_limitado[-500:]
-                    
-                    return self.crew.kickoff(inputs={
-                        "question": question,
-                        "historico": historico_limitado,
-                        "contexto": contexto
-                    })
-                except Exception as e:
-                    print(f"Erro no CrewAI kickoff: {e}")
-                    # Retornar resposta de fallback
-                    return json.dumps({
-                        "Resposta": f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}",
-                        "Classificacao": "Prospecção"
-                    })
-            
-            # Executar em thread separada com timeout muito conservador
-            loop = asyncio.get_event_loop()
-            max_retries = 1  # Apenas 1 retry para economizar recursos
-            for attempt in range(max_retries + 1):
-                try:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        result = await loop.run_in_executor(executor, run_crew_kickoff)
-                    break
-                except Exception as e:
-                    print(f"Tentativa {attempt + 1} falhou: {e}")
-                    if attempt == max_retries:
-                        raise e
-                    await asyncio.sleep(0.5)  # Esperar 0.5 segundos antes de tentar novamente
-
-            # Processar a resposta
-            try:
-                resposta_json = json.loads(str(result))
-                resposta = resposta_json.get("Resposta", "Erro ao obter resposta")
-            except json.JSONDecodeError:
-                resposta = f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}"
-
-            # Atualizar o histórico de chat
-            try:
-                self.chat_history.add_message(client_id, "user", question)
-                self.chat_history.add_message(client_id, "assistant", resposta)
-            except Exception as e:
-                print(f"Erro ao atualizar histórico: {e}")
-
-            return resposta
-            
-        except Exception as e:
-            print(f"Erro no ask_question_async: {e}")
-            # Resposta de fallback em caso de erro
-            fallback_response = f"Olá! Sou seu assistente virtual. Como posso ajudá-lo hoje? Sua pergunta foi: {question}"
-            try:
-                self.chat_history.add_message(client_id, "user", question)
-                self.chat_history.add_message(client_id, "assistant", fallback_response)
-            except:
-                pass
-            return fallback_response
     
     def ask_question(self, question, client_id):
-        """
-        Versão síncrona mantida para compatibilidade
-        """
-        # Buscar contexto relevante no ChromaDB já indexado
-        results = self.chroma_collection.query(
-            query_texts=[question],
-            n_results=3,
-            include=["distances", "documents"]
-        )
-        docs = []
-        if results['documents'] and results['distances']:
-            for doc, dist in zip(results['documents'][0], results['distances'][0]):
-                if dist < 0.8:  # ajuste esse valor conforme necessário
-                    docs.append(doc)
-        contexto = "\n".join(docs)
-        if not contexto:
-            contexto = "Nenhuma informação relevante encontrada na base de conhecimento."
+        """Versão síncrona mantida para compatibilidade"""
+        # Buscar contexto relevante
+        contexto = self.knowledge_manager.get_context(question)
 
         # Executar a tarefa do CrewAI
         result = self.crew.kickoff(inputs={
@@ -284,31 +94,12 @@ class SalesAssistant:
         self.chat_history.add_message(client_id, "assistant", resposta)
 
         return resposta
-    
-    def load_file(self, partner_code, file_name):
-        """
-        Lê um arquivo específico da base de conhecimento do parceiro e retorna o conteúdo.
-        """
-        knowledge_path = os.path.join("knowledge", "partners", partner_code)
-        file_path = os.path.join(knowledge_path, file_name)
-
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as file:
-                content = file.read().strip()
-                asyncio.create_task(log_queue.put(("info", f"Conteúdo do arquivo '{file_name}' carregado para o parceiro '{partner_code}'")))
-                return content
-        else:
-            asyncio.create_task(log_queue.put(("info", f"O arquivo '{file_name}' não foi encontrado para o parceiro '{partner_code}'."))) 
-            return f"Arquivo padrão: {file_name} não encontrado."
-
 
 # Exemplo de uso
 if __name__ == "__main__":
     import asyncio
 
     async def main():
-        client = chromadb.PersistentClient(path="db")
-
         assistant = SalesAssistant("95aed0d0-303e-45cd-a37e-364bff24849f")  # Instancie só uma vez!
         while True:
             question = input("Digite sua pergunta: ")
